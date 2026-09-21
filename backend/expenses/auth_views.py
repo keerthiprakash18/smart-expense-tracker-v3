@@ -1,4 +1,7 @@
+import json
+
 from django.contrib.auth import authenticate
+from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import User
 from rest_framework import status
 from rest_framework.permissions import AllowAny
@@ -9,6 +12,23 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import SecuritySettings
 from .security_utils import verify_totp
 from .views import ChangePasswordView, RegisterView, UserProfileView
+
+
+def consume_recovery_code(security, code):
+    candidate = str(code or "").strip().upper()
+    if not candidate:
+        return False
+    try:
+        hashes = json.loads(security.recovery_codes or "[]")
+    except (TypeError, ValueError):
+        hashes = []
+    for index, stored_hash in enumerate(hashes):
+        if check_password(candidate, stored_hash):
+            hashes.pop(index)
+            security.recovery_codes = json.dumps(hashes)
+            security.save(update_fields=["recovery_codes", "updated_at"])
+            return True
+    return False
 
 
 class LoginView(APIView):
@@ -32,9 +52,9 @@ class LoginView(APIView):
         security, _ = SecuritySettings.objects.get_or_create(user=authenticated)
         if security.two_factor_enabled:
             if not otp:
-                return Response({"two_factor_required": True, "detail": "Enter the 6-digit authenticator code."}, status=status.HTTP_202_ACCEPTED)
-            if not verify_totp(security.totp_secret, otp):
-                return Response({"two_factor_required": True, "detail": "Invalid authenticator code."}, status=status.HTTP_401_UNAUTHORIZED)
+                return Response({"two_factor_required": True, "detail": "Enter your authenticator code or a recovery code."}, status=status.HTTP_202_ACCEPTED)
+            if not verify_totp(security.totp_secret, otp) and not consume_recovery_code(security, otp):
+                return Response({"two_factor_required": True, "detail": "Invalid authenticator or recovery code."}, status=status.HTTP_401_UNAUTHORIZED)
 
         refresh = RefreshToken.for_user(authenticated)
         return Response({"refresh": str(refresh), "access": str(refresh.access_token)}, status=200)

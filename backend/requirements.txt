@@ -11,3 +11,4 @@ pytesseract==0.3.13
 pypdf>=5.0,<7.0
 PyMuPDF>=1.26,<2.0
 django-storages[boto3]>=1.14,<2.0
+qrcode[pil]>=8.2,<9.0

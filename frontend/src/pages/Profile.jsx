@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CreditCard, KeyRound, Landmark, MailCheck, MoonStar, Plus, Save, ShieldCheck, Smartphone, User, Wallet } from 'lucide-react';
+import { CreditCard, KeyRound, Landmark, MoonStar, Plus, Save, ShieldCheck, Smartphone, User, Wallet } from 'lucide-react';
 import api from '../services/api';
 import { PageHeader, Surface, money } from '../components/Ui';
 import { useFinance } from '../context/FinanceContext';
@@ -37,119 +37,186 @@ function AccountForm({onSave}) { const [name,setName]=useState('');const [type,s
 function PasswordForm({onDone,notify}) { const [oldPassword,setOld]=useState('');const [newPassword,setNew]=useState('');const [saving,setSaving]=useState(false);const submit=async(e)=>{e.preventDefault();setSaving(true);try{await api.post('/api/change-password/',{old_password:oldPassword,new_password:newPassword});notify('Password updated');onDone()}catch(err){notify(err.response?.data?.error||'Unable to update password','error')}finally{setSaving(false)}};return <form className="inline-form password" onSubmit={submit}><input required type="password" value={oldPassword} onChange={e=>setOld(e.target.value)} placeholder="Current password"/><input required type="password" minLength="8" value={newPassword} onChange={e=>setNew(e.target.value)} placeholder="New strong password"/><button className="button primary" disabled={saving}>{saving?'Updating…':'Update password'}</button></form> }
 
 
-function SecurityCenter({profile,notify}) {
-  const [status,setStatus]=useState({email_verified:false,two_factor_enabled:false});
+function SecurityCenter({notify}) {
+  const [status,setStatus]=useState({two_factor_enabled:false,recovery_codes_remaining:0});
   const [loading,setLoading]=useState(false);
-  const [emailStep,setEmailStep]=useState('idle');
-  const [emailCode,setEmailCode]=useState('');
-  const [twoFactorSetup,setTwoFactorSetup]=useState(null);
-  const [twoFactorCode,setTwoFactorCode]=useState('');
+  const [setup,setSetup]=useState(null);
+  const [code,setCode]=useState('');
+  const [showManualKey,setShowManualKey]=useState(false);
+  const [recoveryCodes,setRecoveryCodes]=useState([]);
 
-  const load=async()=>{try{const r=await api.get('/api/v3/security/');setStatus(r.data||{})}catch{}};
+  const load=async()=>{
+    try{
+      const r=await api.get('/api/v3/security/');
+      setStatus(r.data||{});
+    }catch{}
+  };
   useEffect(()=>{load()},[]);
-
-  const requestEmail=async()=>{
-    setLoading(true);
-    try{
-      const r=await api.post('/api/v3/security/email/request/');
-      setEmailStep('code');
-      notify(r.data?.message||'Verification code sent');
-    }catch(err){
-      const detail=err.response?.data?.detail;
-      notify(detail?`${err.response?.data?.error||'Unable to send email'} ${detail}`:(err.response?.data?.error||'Unable to send verification email'),'error');
-    }finally{setLoading(false)}
-  };
-
-  const confirmEmail=async(e)=>{
-    e.preventDefault();
-    if(emailCode.length!==6){notify('Enter the 6-digit verification code','error');return}
-    setLoading(true);
-    try{
-      await api.post('/api/v3/security/email/confirm/',{code:emailCode});
-      notify('Email verified');
-      setEmailCode('');
-      setEmailStep('idle');
-      await load();
-    }catch(err){notify(err.response?.data?.error||'Email verification failed','error')}
-    finally{setLoading(false)}
-  };
 
   const start2fa=async()=>{
     setLoading(true);
     try{
       const r=await api.post('/api/v3/security/2fa/setup/');
-      setTwoFactorSetup(r.data);
-      setTwoFactorCode('');
-    }catch(err){notify(err.response?.data?.error||'Unable to start 2FA setup','error')}
-    finally{setLoading(false)}
+      setSetup(r.data);
+      setCode('');
+      setShowManualKey(false);
+      setRecoveryCodes([]);
+    }catch(err){
+      notify(err.response?.data?.error||'Unable to start 2FA setup','error');
+    }finally{setLoading(false)}
   };
 
   const confirm2fa=async(e)=>{
     e.preventDefault();
-    if(twoFactorCode.length!==6){notify('Enter the current 6-digit authenticator code','error');return}
+    if(code.length!==6){
+      notify('Open your authenticator app and enter the current 6-digit code','error');
+      return;
+    }
     setLoading(true);
     try{
-      await api.post('/api/v3/security/2fa/confirm/',{code:twoFactorCode});
+      const r=await api.post('/api/v3/security/2fa/confirm/',{code});
+      setRecoveryCodes(r.data?.recovery_codes||[]);
+      setSetup(null);
+      setCode('');
       notify('Two-factor authentication enabled');
-      setTwoFactorSetup(null);
-      setTwoFactorCode('');
       await load();
-    }catch(err){notify(err.response?.data?.error||'Unable to enable 2FA','error')}
-    finally{setLoading(false)}
-  };
-
-  const copySecret=async()=>{
-    try{await navigator.clipboard.writeText(twoFactorSetup?.secret||'');notify('Setup key copied')}
-    catch{notify('Copy failed — select the key manually','error')}
+    }catch(err){
+      notify(err.response?.data?.error||'Unable to enable 2FA','error');
+    }finally{setLoading(false)}
   };
 
   const disable2fa=async()=>{
     const password=window.prompt('Enter your current password');
     if(!password)return;
-    const code=window.prompt('Enter your authenticator code');
-    if(!code)return;
+    const codeOrRecovery=window.prompt('Enter your authenticator code or a recovery code');
+    if(!codeOrRecovery)return;
     try{
-      await api.post('/api/v3/security/2fa/disable/',{password,code});
+      await api.post('/api/v3/security/2fa/disable/',{password,code:codeOrRecovery});
       notify('Two-factor authentication disabled');
       await load();
-    }catch(err){notify(err.response?.data?.error||'Unable to disable 2FA','error')}
+    }catch(err){
+      notify(err.response?.data?.error||'Unable to disable 2FA','error');
+    }
+  };
+
+  const copyText=async(value,message)=>{
+    try{
+      await navigator.clipboard.writeText(value);
+      notify(message);
+    }catch{
+      notify('Copy failed — select and copy manually','error');
+    }
   };
 
   return <>
     <Surface>
       <div className="section-heading">
-        <div><span>SECURITY CENTER</span><h2>Verification & two-factor authentication</h2><p>Protect access to your finance workspace.</p></div>
+        <div>
+          <span>SECURITY CENTER</span>
+          <h2>Two-factor authentication</h2>
+          <p>Optional extra protection. Normal login continues to work without email verification.</p>
+        </div>
         <ShieldCheck size={20}/>
       </div>
+
       <div className="security-grid">
         <div className="security-item">
-          <div><MailCheck size={20}/><span><strong>Email verification</strong><small>{status.email_verified?'Verified':emailStep==='code'?'Code sent — enter it below':'Not verified'}</small></span></div>
-          <button className={`button ${status.email_verified?'ghost':'primary'}`} disabled={status.email_verified||loading} onClick={requestEmail}>{status.email_verified?'Verified':emailStep==='code'?'Resend code':'Verify email'}</button>
+          <div>
+            <KeyRound size={20}/>
+            <span>
+              <strong>Authenticator 2FA</strong>
+              <small>
+                {status.two_factor_enabled
+                  ? 'Enabled • ' + (status.recovery_codes_remaining||0) + ' recovery codes left'
+                  : 'Disabled — optional'}
+              </small>
+            </span>
+          </div>
+          <button
+            className={'button ' + (status.two_factor_enabled?'ghost':'primary')}
+            disabled={loading}
+            onClick={status.two_factor_enabled?disable2fa:start2fa}
+          >
+            {status.two_factor_enabled?'Disable 2FA':'Enable 2FA'}
+          </button>
         </div>
-        {emailStep==='code'&&!status.email_verified&&
-          <form className="inline-form password" onSubmit={confirmEmail}>
-            <input required inputMode="numeric" maxLength="6" value={emailCode} onChange={e=>setEmailCode(e.target.value.replace(/\D/g,'').slice(0,6))} placeholder="6-digit email code"/>
-            <button className="button primary" disabled={loading}>{loading?'Checking…':'Confirm email'}</button>
-          </form>
-        }
-        <div className="security-item">
-          <div><KeyRound size={20}/><span><strong>Authenticator 2FA</strong><small>{status.two_factor_enabled?'Enabled':'Disabled'}</small></span></div>
-          <button className={`button ${status.two_factor_enabled?'ghost':'primary'}`} disabled={loading} onClick={status.two_factor_enabled?disable2fa:start2fa}>{status.two_factor_enabled?'Disable 2FA':'Enable 2FA'}</button>
+      </div>
+
+      <div className="settings-note">
+        <ShieldCheck size={20}/>
+        <div>
+          <strong>No email code is required for normal login</strong>
+          <span>Email verification and password-reset email are temporarily hidden until a reliable mail provider is configured.</span>
         </div>
       </div>
     </Surface>
 
-    {twoFactorSetup&&
-      <div className="modal-backdrop" onMouseDown={()=>setTwoFactorSetup(null)}>
+    {setup&&
+      <div className="modal-backdrop" onMouseDown={()=>setSetup(null)}>
         <form className="modal-card" onMouseDown={e=>e.stopPropagation()} onSubmit={confirm2fa}>
-          <div className="modal-head"><div><span>AUTHENTICATOR SETUP</span><h2>Enable two-factor authentication</h2></div><button type="button" className="icon-button" onClick={()=>setTwoFactorSetup(null)}>×</button></div>
-          <div className="settings-note"><ShieldCheck size={20}/><div><strong>Step 1 — Add this account in Google Authenticator or Microsoft Authenticator</strong><span>Choose “Enter a setup key”, use your Smart Expense email as the account name, and select a time-based key.</span></div></div>
-          <label><span>Setup key</span><input readOnly value={twoFactorSetup.secret||''}/></label>
-          <button type="button" className="button ghost" onClick={copySecret}>Copy setup key</button>
-          <div className="settings-note"><KeyRound size={20}/><div><strong>Step 2 — Enter the current 6-digit code</strong><span>The authenticator creates a new code about every 30 seconds.</span></div></div>
-          <label><span>Authenticator code</span><input required autoFocus inputMode="numeric" maxLength="6" value={twoFactorCode} onChange={e=>setTwoFactorCode(e.target.value.replace(/\D/g,'').slice(0,6))} placeholder="123456" autoComplete="one-time-code"/></label>
+          <div className="modal-head">
+            <div><span>AUTHENTICATOR SETUP</span><h2>Enable two-factor authentication</h2></div>
+            <button type="button" className="icon-button" onClick={()=>setSetup(null)}>×</button>
+          </div>
+
+          <div className="alert success">
+            The 6-digit code is NOT sent by email or SMS. Google Authenticator / Microsoft Authenticator generates it on your phone every 30 seconds.
+          </div>
+
+          <div style={{display:'grid',placeItems:'center',padding:'12px 0'}}>
+            <img
+              src={setup.qr_data_url}
+              alt="Authenticator QR code"
+              style={{width:220,height:220,background:'#fff',padding:12,borderRadius:16}}
+            />
+          </div>
+
+          <div className="settings-note">
+            <KeyRound size={20}/>
+            <div>
+              <strong>Step 1 — Scan the QR code</strong>
+              <span>Open Google Authenticator → + → Scan a QR code. Do not share this QR code with anyone.</span>
+            </div>
+          </div>
+
+          <button type="button" className="button ghost" onClick={()=>setShowManualKey(!showManualKey)}>
+            {showManualKey?'Hide manual setup key':'Can’t scan? Show manual setup key'}
+          </button>
+
+          {showManualKey&&<>
+            <label><span>Manual setup key</span><input readOnly value={setup.secret||''}/></label>
+            <button type="button" className="button ghost" onClick={()=>copyText(setup.secret||'','Setup key copied')}>Copy setup key</button>
+          </>}
+
+          <div className="settings-note">
+            <KeyRound size={20}/>
+            <div>
+              <strong>Step 2 — Enter the code shown in Authenticator</strong>
+              <span>Open the newly added Smart Expense account in Authenticator and type its current 6-digit code below.</span>
+            </div>
+          </div>
+
+          <label>
+            <span>6-digit authenticator code</span>
+            <input required autoFocus inputMode="numeric" maxLength="6" value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,6))} placeholder="123456" autoComplete="one-time-code"/>
+          </label>
+
           <button className="button primary full" disabled={loading}>{loading?'Enabling…':'Confirm & enable 2FA'}</button>
         </form>
+      </div>
+    }
+
+    {recoveryCodes.length>0&&
+      <div className="modal-backdrop">
+        <div className="modal-card">
+          <div className="modal-head"><div><span>RECOVERY CODES</span><h2>Save these codes now</h2></div></div>
+          <div className="alert success">Each recovery code works once if you lose access to your authenticator. Store them somewhere private.</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,margin:'14px 0'}}>
+            {recoveryCodes.map(item=><code key={item} style={{padding:12,border:'1px solid var(--border)',borderRadius:10,textAlign:'center'}}>{item}</code>)}
+          </div>
+          <button type="button" className="button ghost full" onClick={()=>copyText(recoveryCodes.join('\n'),'Recovery codes copied')}>Copy all recovery codes</button>
+          <button type="button" className="button primary full" onClick={()=>setRecoveryCodes([])}>I saved them</button>
+        </div>
       </div>
     }
   </>;

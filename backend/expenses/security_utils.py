@@ -38,3 +38,12 @@ def verify_totp(secret, code, window=1, step=30):
 def provisioning_uri(secret, email, issuer="Smart Expense Tracker"):
     label = quote(f"{issuer}:{email or 'account'}")
     return f"otpauth://totp/{label}?secret={quote(secret)}&issuer={quote(issuer)}&algorithm=SHA1&digits=6&period=30"
+
+
+def generate_recovery_codes(count=8):
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    codes = []
+    for _ in range(count):
+        raw = "".join(secrets.choice(alphabet) for _ in range(10))
+        codes.append(f"{raw[:5]}-{raw[5:]}")
+    return codes

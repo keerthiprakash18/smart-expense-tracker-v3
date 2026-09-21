@@ -400,6 +400,7 @@ class SecuritySettings(models.Model):
     email_verified = models.BooleanField(default=False)
     totp_secret = models.CharField(max_length=64, blank=True, default="")
     two_factor_enabled = models.BooleanField(default=False)
+    recovery_codes = models.TextField(default="[]", blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):

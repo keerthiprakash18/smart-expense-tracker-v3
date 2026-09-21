@@ -305,14 +305,25 @@ class SmartExpenseApiTests(APITestCase):
         setup = self.client.post(reverse("v3-2fa-setup"), {}, format="json")
         self.assertEqual(setup.status_code, 200, setup.data)
         code = totp_code(setup.data["secret"])
+        self.assertTrue(setup.data["qr_data_url"].startswith("data:image/png;base64,"))
         confirmed = self.client.post(reverse("v3-2fa-confirm"), {"code": code}, format="json")
         self.assertEqual(confirmed.status_code, 200, confirmed.data)
+        self.assertEqual(len(confirmed.data["recovery_codes"]), 8)
+        recovery_code = confirmed.data["recovery_codes"][0]
+
         self.client.credentials()
         challenge = self.client.post(reverse("token_obtain_pair"), {"username": "twofactor", "password": "StrongPass123!"}, format="json")
         self.assertEqual(challenge.status_code, 202, challenge.data)
+
         token = self.client.post(reverse("token_obtain_pair"), {"username": "twofactor", "password": "StrongPass123!", "otp": totp_code(setup.data["secret"])}, format="json")
         self.assertEqual(token.status_code, 200, token.data)
         self.assertIn("access", token.data)
+
+        recovery_login = self.client.post(reverse("token_obtain_pair"), {"username": "twofactor", "password": "StrongPass123!", "otp": recovery_code}, format="json")
+        self.assertEqual(recovery_login.status_code, 200, recovery_login.data)
+
+        reused = self.client.post(reverse("token_obtain_pair"), {"username": "twofactor", "password": "StrongPass123!", "otp": recovery_code}, format="json")
+        self.assertEqual(reused.status_code, 401, reused.data)
 
     def test_password_reset_confirm(self):
         user = self.register_and_login("resetuser", "reset@example.com")

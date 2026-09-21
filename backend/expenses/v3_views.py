@@ -1,3 +1,4 @@
+import base64
 import csv
 import io
 import json
@@ -41,7 +42,7 @@ from .models import (
     SecuritySettings,
     UserProfile,
 )
-from .security_utils import generate_totp_secret, provisioning_uri, verify_totp
+from .security_utils import generate_recovery_codes, generate_totp_secret, provisioning_uri, verify_totp
 from .serializers import ExpenseSerializer
 from .v3_serializers import (
     AccountTransferSerializer,
@@ -630,7 +631,13 @@ class SecurityStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(SecuritySettingsSerializer(get_security(request.user)).data)
+        security = get_security(request.user)
+        data = SecuritySettingsSerializer(security).data
+        try:
+            data["recovery_codes_remaining"] = len(json.loads(security.recovery_codes or "[]"))
+        except (TypeError, ValueError):
+            data["recovery_codes_remaining"] = 0
+        return Response(data)
 
 
 class EmailVerificationRequestView(APIView):
@@ -727,12 +734,28 @@ class TwoFactorSetupView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        import qrcode
+
         sec = get_security(request.user)
         secret = generate_totp_secret()
+        uri = provisioning_uri(secret, request.user.email or request.user.username)
+
         sec.totp_secret = secret
         sec.two_factor_enabled = False
-        sec.save(update_fields=["totp_secret", "two_factor_enabled", "updated_at"])
-        return Response({"secret": secret, "otpauth_uri": provisioning_uri(secret, request.user.email or request.user.username)})
+        sec.recovery_codes = "[]"
+        sec.save(update_fields=["totp_secret", "two_factor_enabled", "recovery_codes", "updated_at"])
+
+        image = qrcode.make(uri)
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        qr_data_url = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+
+        return Response({
+            "secret": secret,
+            "otpauth_uri": uri,
+            "qr_data_url": qr_data_url,
+            "message": "Scan this QR code with an authenticator app. The app generates the 6-digit code locally.",
+        })
 
 
 class TwoFactorConfirmView(APIView):
@@ -743,10 +766,16 @@ class TwoFactorConfirmView(APIView):
         if not sec.totp_secret:
             return Response({"error": "Start 2FA setup first."}, status=400)
         if not verify_totp(sec.totp_secret, request.data.get("code")):
-            return Response({"error": "Invalid authenticator code."}, status=400)
+            return Response({"error": "Invalid authenticator code. Open your authenticator app and enter the current 6-digit code."}, status=400)
+
+        recovery_codes = generate_recovery_codes()
+        sec.recovery_codes = json.dumps([make_password(code) for code in recovery_codes])
         sec.two_factor_enabled = True
-        sec.save(update_fields=["two_factor_enabled", "updated_at"])
-        return Response({"message": "Two-factor authentication enabled."})
+        sec.save(update_fields=["two_factor_enabled", "recovery_codes", "updated_at"])
+        return Response({
+            "message": "Two-factor authentication enabled.",
+            "recovery_codes": recovery_codes,
+        })
 
 
 class TwoFactorDisableView(APIView):
@@ -760,5 +789,6 @@ class TwoFactorDisableView(APIView):
             return Response({"error": "Invalid authenticator code."}, status=400)
         sec.two_factor_enabled = False
         sec.totp_secret = ""
-        sec.save(update_fields=["two_factor_enabled", "totp_secret", "updated_at"])
+        sec.recovery_codes = "[]"
+        sec.save(update_fields=["two_factor_enabled", "totp_secret", "recovery_codes", "updated_at"])
         return Response({"message": "Two-factor authentication disabled."})
