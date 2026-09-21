@@ -2,12 +2,11 @@ import axios from "axios";
 
 const configuredBaseUrl = (import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
 
-// Development uses Vite's /api proxy when VITE_API_URL is omitted.
-// Production/Capacitor should set VITE_API_URL at build time; the Render URL
-// remains a safe fallback for the existing deployment.
 export const API_BASE_URL =
   configuredBaseUrl ||
-  (import.meta.env.DEV ? "" : "https://smart-expense-tracker-zaxw.onrender.com");
+  (import.meta.env.DEV
+    ? ""
+    : "https://smart-expense-tracker-v3-production.up.railway.app");
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -32,10 +31,10 @@ api.interceptors.request.use((config) => {
   config.headers = config.headers || {};
   if (token) config.headers.Authorization = `Bearer ${token}`;
 
-  // Let Axios/browser generate the multipart boundary.
   if (config.data instanceof FormData) {
     delete config.headers["Content-Type"];
   }
+
   return config;
 });
 
