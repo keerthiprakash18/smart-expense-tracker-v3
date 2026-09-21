@@ -56,7 +56,7 @@ function SecurityCenter({profile,notify}) {
       notify(r.data?.message||'Verification code sent');
     }catch(err){
       const detail=err.response?.data?.detail;
-      notify(detail?\`${err.response?.data?.error||'Unable to send email'} ${detail}\`:(err.response?.data?.error||'Unable to send verification email'),'error');
+      notify(detail?`${err.response?.data?.error||'Unable to send email'} ${detail}`:(err.response?.data?.error||'Unable to send verification email'),'error');
     }finally{setLoading(false)}
   };
 
