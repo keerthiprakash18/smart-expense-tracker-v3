@@ -1,0 +1,9 @@
+node_modules/
+venv/
+.env
+.env.local
+.env.production
+db.sqlite3
+__pycache__/
+dist/
+build/

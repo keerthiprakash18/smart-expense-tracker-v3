@@ -1,0 +1,95 @@
+import axios from "axios";
+
+const configuredBaseUrl = (import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
+
+// Development uses Vite's /api proxy when VITE_API_URL is omitted.
+// Production/Capacitor should set VITE_API_URL at build time; the Render URL
+// remains a safe fallback for the existing deployment.
+export const API_BASE_URL =
+  configuredBaseUrl ||
+  (import.meta.env.DEV ? "" : "https://smart-expense-tracker-zaxw.onrender.com");
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 90000,
+});
+
+export const getAccessToken = () => localStorage.getItem("access_token");
+export const getRefreshToken = () => localStorage.getItem("refresh_token");
+
+export const setTokens = (accessToken, refreshToken = null) => {
+  if (accessToken) localStorage.setItem("access_token", accessToken);
+  if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
+};
+
+export const clearTokens = () => {
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("refresh_token");
+};
+
+api.interceptors.request.use((config) => {
+  const token = getAccessToken();
+  config.headers = config.headers || {};
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+
+  // Let Axios/browser generate the multipart boundary.
+  if (config.data instanceof FormData) {
+    delete config.headers["Content-Type"];
+  }
+  return config;
+});
+
+let refreshPromise = null;
+
+const refreshAccessToken = async () => {
+  const refresh = getRefreshToken();
+  if (!refresh) throw new Error("No refresh token available");
+
+  if (!refreshPromise) {
+    refreshPromise = axios
+      .post(`${API_BASE_URL}/api/token/refresh/`, { refresh }, { timeout: 30000 })
+      .then((response) => {
+        const access = response.data?.access;
+        if (!access) throw new Error("Refresh response did not include an access token");
+        setTokens(access, response.data?.refresh || refresh);
+        return access;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+
+  return refreshPromise;
+};
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    const isAuthEndpoint = String(originalRequest?.url || "").includes("/api/token/");
+
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !isAuthEndpoint &&
+      getRefreshToken()
+    ) {
+      originalRequest._retry = true;
+      try {
+        const access = await refreshAccessToken();
+        originalRequest.headers = originalRequest.headers || {};
+        originalRequest.headers.Authorization = `Bearer ${access}`;
+        return api(originalRequest);
+      } catch {
+        clearTokens();
+      }
+    } else if (error.response?.status === 401 && !isAuthEndpoint) {
+      clearTokens();
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export default api;

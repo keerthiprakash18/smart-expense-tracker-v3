@@ -1,0 +1,36 @@
+import React, { useEffect, useState } from 'react';
+import { CreditCard, KeyRound, Landmark, MoonStar, Plus, Save, ShieldCheck, Smartphone, User, Wallet } from 'lucide-react';
+import api from '../services/api';
+import { PageHeader, Surface, money } from '../components/Ui';
+import { useFinance } from '../context/FinanceContext';
+import { useTheme } from '../context/ThemeContext';
+
+const accountIcons = { BANK: Landmark, UPI: Smartphone, CASH: Wallet, CARD: CreditCard, WALLET: Wallet, CUSTOM: Wallet };
+
+export default function Profile() {
+  const { profile, accounts, summary, updateProfile, createAccount, notify } = useFinance();
+  const { theme, setTheme, themes } = useTheme();
+  const [form,setForm]=useState({name:'',username:'',email:'',phone:'',country:'India',currency:'₹',monthly_budget:'',savings_goal:''});
+  const [saving,setSaving]=useState(false); const [accountOpen,setAccountOpen]=useState(false); const [passwordOpen,setPasswordOpen]=useState(false);
+  useEffect(()=>{if(profile)setForm({name:profile.name||'',username:profile.username||'',email:profile.email||'',phone:profile.phone||'',country:profile.country||'India',currency:profile.currency||'₹',monthly_budget:profile.monthly_budget??'',savings_goal:profile.savings_goal??''})},[profile]);
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const save=async(e)=>{e.preventDefault();setSaving(true);try{await updateProfile(form)}catch(err){notify(err.response?.data?.error||'Unable to update profile','error')}finally{setSaving(false)}};
+
+  return <div className="page-stack">
+    <PageHeader eyebrow="ACCOUNT" title="Profile & settings" description="Control your identity, accounts, monthly plan and the visual style of your app." />
+    <section className="profile-grid">
+      <Surface className="profile-card"><div className="profile-avatar">{(profile?.name||profile?.username||'U').slice(0,1).toUpperCase()}</div><h2>{profile?.name||profile?.username}</h2><p>{profile?.email}</p><div className="profile-stat"><span>Total account balance</span><strong>{money(summary.account_balance,profile?.currency||'₹')}</strong></div><div className="security-pill"><ShieldCheck size={16}/> JWT secured</div></Surface>
+      <Surface className="form-surface"><div className="section-heading"><div><span>PERSONAL DETAILS</span><h2>Your profile</h2></div><User size={20}/></div><form onSubmit={save}><div className="form-grid two"><label><span>Name</span><input value={form.name} onChange={e=>set('name',e.target.value)}/></label><label><span>Username</span><input value={form.username} onChange={e=>set('username',e.target.value)}/></label></div><div className="form-grid two"><label><span>Email</span><input type="email" value={form.email} onChange={e=>set('email',e.target.value)}/></label><label><span>Phone</span><input value={form.phone} onChange={e=>set('phone',e.target.value)}/></label></div><div className="form-grid three"><label><span>Currency</span><select value={form.currency} onChange={e=>set('currency',e.target.value)}>{['₹','$','€','£'].map(x=><option key={x}>{x}</option>)}</select></label><label><span>Monthly budget</span><input type="number" min="0" value={form.monthly_budget} onChange={e=>set('monthly_budget',e.target.value)}/></label><label><span>Savings target</span><input type="number" min="0" value={form.savings_goal} onChange={e=>set('savings_goal',e.target.value)}/></label></div><button className="button primary" disabled={saving}><Save size={17}/>{saving?'Saving…':'Save profile'}</button></form></Surface>
+    </section>
+
+    <Surface><div className="section-heading"><div><span>APPEARANCE</span><h2>Choose your finance theme</h2><p>Same app, your preferred personality.</p></div><MoonStar size={20}/></div><div className="theme-grid">{themes.map((item)=><button key={item.id} className={`theme-card ${theme===item.id?'active':''}`} onClick={()=>setTheme(item.id)}><div className="theme-preview" style={{background:item.swatch}}><span style={{background:item.accent}}/><i/><i/></div><div><strong>{item.name}</strong><span>{theme===item.id?'Active theme':'Use theme'}</span></div></button>)}</div></Surface>
+
+    <Surface><div className="section-heading"><div><span>ACCOUNTS</span><h2>Your money sources</h2></div><button className="button ghost" onClick={()=>setAccountOpen(!accountOpen)}><Plus size={17}/> Add account</button></div>{accountOpen&&<AccountForm onSave={async(data)=>{try{await createAccount(data);setAccountOpen(false)}catch(err){notify(err.response?.data?.name?.[0]||'Unable to add account','error')}}}/>}<div className="account-grid">{accounts.map((a)=>{const Icon=accountIcons[a.account_type]||Wallet;return <div className="account-card" key={a.id}><div className="account-icon"><Icon size={20}/></div><div><strong>{a.name}</strong><span>{a.account_type}</span></div><b>{money(a.balance,profile?.currency||'₹')}</b></div>})}</div></Surface>
+
+    <Surface><div className="section-heading"><div><span>SECURITY</span><h2>Password & access</h2></div><button className="button ghost" onClick={()=>setPasswordOpen(!passwordOpen)}><KeyRound size={17}/> Change password</button></div>{passwordOpen&&<PasswordForm onDone={()=>setPasswordOpen(false)} notify={notify}/>}<div className="settings-note"><ShieldCheck size={20}/><div><strong>Private by design</strong><span>Each API endpoint is authenticated and scoped to your user account.</span></div></div></Surface>
+  </div>;
+}
+
+function AccountForm({onSave}) { const [name,setName]=useState('');const [type,setType]=useState('BANK');const [balance,setBalance]=useState('0');return <form className="inline-form" onSubmit={e=>{e.preventDefault();onSave({name,account_type:type,balance})}}><input required value={name} onChange={e=>setName(e.target.value)} placeholder="Account name"/><select value={type} onChange={e=>setType(e.target.value)}>{['BANK','UPI','CASH','CARD','WALLET','CUSTOM'].map(x=><option key={x}>{x}</option>)}</select><input type="number" step="0.01" value={balance} onChange={e=>setBalance(e.target.value)} placeholder="Opening balance"/><button className="button primary">Add account</button></form> }
+
+function PasswordForm({onDone,notify}) { const [oldPassword,setOld]=useState('');const [newPassword,setNew]=useState('');const [saving,setSaving]=useState(false);const submit=async(e)=>{e.preventDefault();setSaving(true);try{await api.post('/api/change-password/',{old_password:oldPassword,new_password:newPassword});notify('Password updated');onDone()}catch(err){notify(err.response?.data?.error||'Unable to update password','error')}finally{setSaving(false)}};return <form className="inline-form password" onSubmit={submit}><input required type="password" value={oldPassword} onChange={e=>setOld(e.target.value)} placeholder="Current password"/><input required type="password" minLength="8" value={newPassword} onChange={e=>setNew(e.target.value)} placeholder="New strong password"/><button className="button primary" disabled={saving}>{saving?'Updating…':'Update password'}</button></form> }
