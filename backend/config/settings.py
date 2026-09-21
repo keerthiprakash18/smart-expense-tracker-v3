@@ -113,15 +113,25 @@ if os.getenv("AWS_STORAGE_BUCKET_NAME", "").strip():
     AWS_QUERYSTRING_AUTH = os.getenv("AWS_QUERYSTRING_AUTH", "True").lower() in {"1", "true", "yes", "on"}
     AWS_S3_FILE_OVERWRITE = False
 
-# Email security flows (verification + password reset). Configure SMTP on
-# Railway/Vercel environments; local development defaults to console output.
-EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+# Email security flows (verification + password reset).
+# Local development prints messages to the console. Production defaults to
+# SMTP and requires the Railway EMAIL_* variables below.
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend"
+    if DEBUG
+    else "django.core.mail.backends.smtp.EmailBackend",
+)
 EMAIL_HOST = os.getenv("EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() in {"1", "true", "yes", "on"}
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Smart Expense <noreply@smartexpense.app>")
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "20"))
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL",
+    EMAIL_HOST_USER or "Smart Expense <noreply@smartexpense.app>",
+)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

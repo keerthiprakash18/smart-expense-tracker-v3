@@ -599,6 +599,19 @@ def get_security(user):
     return obj
 
 
+def email_delivery_configured():
+    backend = str(getattr(settings, "EMAIL_BACKEND", ""))
+    if backend.endswith("console.EmailBackend"):
+        return bool(settings.DEBUG)
+    if backend.endswith("smtp.EmailBackend"):
+        return bool(
+            getattr(settings, "EMAIL_HOST", "")
+            and getattr(settings, "EMAIL_HOST_USER", "")
+            and getattr(settings, "EMAIL_HOST_PASSWORD", "")
+        )
+    return True
+
+
 def issue_security_code(user, purpose):
     SecurityCode.objects.filter(user=user, purpose=purpose, consumed_at__isnull=True).delete()
     code = f"{secrets.randbelow(1000000):06d}"
@@ -626,6 +639,14 @@ class EmailVerificationRequestView(APIView):
     def post(self, request):
         if not request.user.email:
             return Response({"error": "Add an email address first."}, status=400)
+        if not email_delivery_configured():
+            return Response(
+                {
+                    "error": "Email delivery is not configured on the server.",
+                    "detail": "Add SMTP email variables to the Railway backend service and redeploy.",
+                },
+                status=503,
+            )
         code = issue_security_code(request.user, "EMAIL_VERIFY")
         try:
             send_code_email(request.user, code, "Verify your Smart Expense email")
@@ -658,6 +679,14 @@ class PasswordResetRequestView(APIView):
     authentication_classes = []
 
     def post(self, request):
+        if not email_delivery_configured():
+            return Response(
+                {
+                    "error": "Email delivery is not configured on the server.",
+                    "detail": "Add SMTP email variables to the Railway backend service and redeploy.",
+                },
+                status=503,
+            )
         email = str(request.data.get("email", "")).strip().lower()
         user = User.objects.filter(email__iexact=email).first()
         if user:
