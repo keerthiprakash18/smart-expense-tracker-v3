@@ -560,33 +560,75 @@ class ReceiptScanView(APIView):
             return Response({"error": "Only receipt images and PDF files are supported."}, status=400)
 
         extracted_text = ""
+
+        def run_receipt_ocr(image):
+            from PIL import ImageEnhance, ImageOps
+            import pytesseract
+
+            tesseract_cmd = os.getenv("TESSERACT_CMD", "").strip()
+            if tesseract_cmd:
+                pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+
+            image = ImageOps.exif_transpose(image).convert("RGB")
+            gray = ImageEnhance.Sharpness(
+                ImageEnhance.Contrast(
+                    ImageOps.autocontrast(ImageOps.grayscale(image))
+                ).enhance(2.2)
+            ).enhance(2.0)
+
+            if max(gray.size) < 1800:
+                scale = max(2, round(1800 / max(gray.size)))
+                gray = gray.resize((gray.width * scale, gray.height * scale))
+
+            thresholds = [
+                gray,
+                gray.point(lambda p: 255 if p > 160 else 0),
+                gray.point(lambda p: 255 if p > 185 else 0),
+            ]
+            texts = []
+            for variant in thresholds:
+                for config in ("--oem 3 --psm 6", "--oem 3 --psm 11"):
+                    text = pytesseract.image_to_string(variant, config=config).strip()
+                    if text:
+                        texts.append(text)
+
+            return max(texts, key=len) if texts else ""
+
         try:
             if is_pdf:
                 import pypdf
 
+                file_obj.seek(0)
                 reader = pypdf.PdfReader(file_obj)
-                extracted_text = "\n".join((page.extract_text() or "") for page in reader.pages)
+                extracted_text = "\n".join(
+                    (page.extract_text() or "") for page in reader.pages
+                ).strip()
+
+                # Image-only/scanned PDFs usually have little or no embedded text.
+                # Render the first pages and OCR them so phone-scanned bills work too.
+                if len(extracted_text) < 40:
+                    import pymupdf
+                    from PIL import Image
+                    from io import BytesIO
+
+                    file_obj.seek(0)
+                    document = pymupdf.open(stream=file_obj.read(), filetype="pdf")
+                    page_texts = []
+                    for page_index in range(min(3, document.page_count)):
+                        page = document.load_page(page_index)
+                        pix = page.get_pixmap(matrix=pymupdf.Matrix(2.2, 2.2), alpha=False)
+                        image = Image.open(BytesIO(pix.tobytes("png")))
+                        text = run_receipt_ocr(image)
+                        if text:
+                            page_texts.append(text)
+                    if page_texts:
+                        extracted_text = "\n".join(page_texts)
             else:
-                from PIL import Image, ImageEnhance, ImageOps
-                import pytesseract
+                from PIL import Image
 
-                tesseract_cmd = os.getenv("TESSERACT_CMD", "").strip()
-                if tesseract_cmd:
-                    pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
-
-                image = Image.open(file_obj).convert("RGB")
-                gray = ImageEnhance.Sharpness(
-                    ImageEnhance.Contrast(ImageOps.autocontrast(ImageOps.grayscale(image))).enhance(2.0)
-                ).enhance(2.0)
-                if max(gray.size) < 1800:
-                    gray = gray.resize((gray.width * 2, gray.height * 2))
-                threshold = gray.point(lambda p: 255 if p > 170 else 0)
-                texts = []
-                for variant, config in ((gray, "--oem 3 --psm 6"), (gray, "--oem 3 --psm 11"), (threshold, "--oem 3 --psm 6")):
-                    text = pytesseract.image_to_string(variant, config=config).strip()
-                    if text:
-                        texts.append(text)
-                extracted_text = max(texts, key=len) if texts else ""
+                file_obj.seek(0)
+                image = Image.open(file_obj)
+                extracted_text = run_receipt_ocr(image)
         except Exception as exc:
             return Response(
                 {"error": "Receipt text extraction failed.", "detail": str(exc)},
