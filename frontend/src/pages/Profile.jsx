@@ -124,7 +124,7 @@ function SecurityCenter({profile,notify}) {
       <div className="security-grid">
         <div className="security-item">
           <div><MailCheck size={20}/><span><strong>Email verification</strong><small>{status.email_verified?'Verified':emailStep==='code'?'Code sent — enter it below':'Not verified'}</small></span></div>
-          <button className={\`button ${status.email_verified?'ghost':'primary'}\`} disabled={status.email_verified||loading} onClick={requestEmail}>{status.email_verified?'Verified':emailStep==='code'?'Resend code':'Verify email'}</button>
+          <button className={`button ${status.email_verified?'ghost':'primary'}`} disabled={status.email_verified||loading} onClick={requestEmail}>{status.email_verified?'Verified':emailStep==='code'?'Resend code':'Verify email'}</button>
         </div>
         {emailStep==='code'&&!status.email_verified&&
           <form className="inline-form password" onSubmit={confirmEmail}>
@@ -134,7 +134,7 @@ function SecurityCenter({profile,notify}) {
         }
         <div className="security-item">
           <div><KeyRound size={20}/><span><strong>Authenticator 2FA</strong><small>{status.two_factor_enabled?'Enabled':'Disabled'}</small></span></div>
-          <button className={\`button ${status.two_factor_enabled?'ghost':'primary'}\`} disabled={loading} onClick={status.two_factor_enabled?disable2fa:start2fa}>{status.two_factor_enabled?'Disable 2FA':'Enable 2FA'}</button>
+          <button className={`button ${status.two_factor_enabled?'ghost':'primary'}`} disabled={loading} onClick={status.two_factor_enabled?disable2fa:start2fa}>{status.two_factor_enabled?'Disable 2FA':'Enable 2FA'}</button>
         </div>
       </div>
     </Surface>
