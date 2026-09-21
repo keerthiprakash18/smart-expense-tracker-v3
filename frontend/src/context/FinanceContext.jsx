@@ -36,6 +36,10 @@ export function FinanceProvider({ children }) {
     silent ? setRefreshing(true) : setLoading(true);
     setError('');
     try {
+      await Promise.allSettled([
+        api.post('/api/v3/recurring/process/'),
+        api.post('/api/v3/notifications/sync/'),
+      ]);
       const [profileRes, accountsRes, txRes, summaryRes] = await Promise.all([
         api.get('/api/profile/'),
         api.get('/api/accounts/'),

@@ -1,38 +1,66 @@
-# Smart Expense Tracker V2 — Product Upgrade Audit
+# Smart Expense Tracker V3 — Release Audit
 
-## Architecture upgrade
+## Release strategy
 
-The old frontend concentrated most behavior inside one very large Dashboard component. V2 replaces that with a maintainable product structure:
+This V3 batch is prepared as one atomic production release so Railway and Vercel receive one deployment trigger instead of many incremental pushes.
 
-- `AppShell` — desktop sidebar, mobile bottom navigation, account controls and sync.
-- `FinanceContext` — shared profile/accounts/transactions/summary state and CRUD operations.
-- `ThemeContext` — persistent user-selectable themes.
-- Dedicated pages for Overview, Transactions, Add/Edit, Analytics, Money Hub and Profile/Settings.
-- Shared UI primitives for cards, metrics, progress, empty states and transaction rows.
+## Implemented feature set
 
-## Product capabilities added / completed
+1. Recurring transaction engine.
+2. Account-to-account transfers.
+3. Category-wise monthly budgets.
+4. Receipt Vault.
+5. Bill reminders through the notification center.
+6. Smart merchant memory for OCR categorisation/payment method.
+7. Credit-card tracking with purchase/payment history.
+8. Custom categories.
+9. Financial calendar.
+10. JSON backup/restore plus CSV import/export.
+11. Password reset, email verification and authenticator 2FA.
+12. Optional S3-compatible receipt storage for AWS S3 / Cloudflare R2.
+13. Notification center.
+14. Smart financial insights.
+15. Android/Capacitor production structure.
 
-- Premium responsive fintech UI with Midnight, Ocean, Emerald and Gold themes.
-- Separate workflow screens instead of an overcrowded single dashboard.
-- Real transaction create/edit/delete connected to account-balance logic.
-- Search/filter/export transaction ledger.
-- Monthly budget health and category/cash-flow analytics.
-- Image/PDF receipt scan entry point.
-- Money Hub backend APIs + UI:
-  - borrowed/lent money,
-  - repayment history,
-  - upcoming bills,
-  - savings goals.
-- Installable PWA configuration while retaining Capacitor Android support.
-- `setup.cmd` and `start.cmd` Windows launchers to avoid PowerShell signature-policy friction.
-- GitHub Actions CI for Django checks/tests and a fresh Linux frontend production build.
+## OCR upgrade
 
-## Verification performed before push
+- Camera capture, image upload and PDF upload.
+- Automatic scan immediately after capture/upload.
+- Tesseract preprocessing with multiple page-segmentation modes and thresholds.
+- Image-only/scanned PDF fallback through PyMuPDF rendering + OCR.
+- Merchant, amount, date, category, payment method, tax, GSTIN and UPI reference extraction.
+- OCR confidence persisted with the transaction.
+- Duplicate receipt warning.
+- Receipt image/PDF retained with the transaction and exposed in Receipt Vault.
 
-- Python source compile: pass.
-- Django `manage.py check`: pass.
-- `makemigrations --check --dry-run`: no model drift.
-- Backend regression suite: 7/7 tests pass.
-- Frontend JS/JSX parse: 20 files, 0 syntax errors.
-- Frontend relative import scan: 0 missing imports.
-- Local Linux Vite build cannot reuse the user-uploaded Windows `node_modules` because its Rolldown native binding is Windows-specific. The repository CI intentionally performs a clean `npm ci` on Linux to validate the real production build.
+## Architecture
+
+- Existing Django REST/JWT backend preserved and extended.
+- V3 APIs isolated under `/api/v3/` where appropriate.
+- Existing transaction/account ledger behavior preserved.
+- Planner groups budgets, recurring rules, transfers, cards, custom categories, calendar and backup workflows.
+- Dedicated Receipt Vault and Notifications pages.
+- User isolation remains enforced at queryset/API level.
+
+## Verification before release
+
+- `python manage.py check`: pass.
+- `python manage.py makemigrations --check --dry-run`: no changes detected.
+- Existing core regression group: 8/8 pass.
+- New V3 regression group: 8/8 pass.
+- Total backend tests: 16/16 pass.
+- GitHub CI is configured to run a clean frontend `npm ci` + `npm run build` and backend checks/tests on the single release push.
+
+## Repository hygiene
+
+The release removes the accidentally tracked `pydeps/` dependency copy and keeps generated/runtime content out of Git:
+
+- `pydeps/`
+- `backend/venv/`
+- `backend/db.sqlite3`
+- `backend/media/`
+- `backend/staticfiles/`
+- `frontend/node_modules/`
+- `frontend/dist/`
+- Android build/cache output
+- environment secret files

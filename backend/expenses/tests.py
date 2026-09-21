@@ -2,10 +2,14 @@ from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.contrib.auth.hashers import make_password
+from django.utils import timezone
+from datetime import timedelta
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import Account, Bill, Expense, MoneyDebt, SavingsGoal, UserProfile
+from .models import Account, Bill, Expense, MoneyDebt, SavingsGoal, SecurityCode, UserProfile
+from .security_utils import totp_code
 
 
 class SmartExpenseApiTests(APITestCase):
@@ -185,3 +189,137 @@ class SmartExpenseApiTests(APITestCase):
         self.assertEqual(goals.status_code, 200)
         self.assertEqual(len(bills.data), 0)
         self.assertEqual(len(goals.data), 0)
+
+    def test_login_accepts_email_or_username(self):
+        self.register_and_login("emailuser", "emailuser@example.com")
+        self.client.credentials()
+        token = self.client.post(
+            reverse("token_obtain_pair"),
+            {"username": "emailuser@example.com", "password": "StrongPass123!"},
+            format="json",
+        )
+        self.assertEqual(token.status_code, 200, token.data)
+        self.assertIn("access", token.data)
+
+    def test_account_transfer_moves_balance_without_counting_as_spend(self):
+        user = self.register_and_login("transfer", "transfer@example.com")
+        accounts = list(Account.objects.filter(user=user).order_by("id"))
+        accounts[0].balance = Decimal("1000.00")
+        accounts[0].save(update_fields=["balance"])
+        response = self.client.post(
+            reverse("v3-transfer-list"),
+            {"from_account": accounts[0].id, "to_account": accounts[1].id, "amount": "250.00", "date": "2026-09-21"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        accounts[0].refresh_from_db(); accounts[1].refresh_from_db()
+        self.assertEqual(accounts[0].balance, Decimal("750.00"))
+        self.assertEqual(accounts[1].balance, Decimal("250.00"))
+        summary = self.client.get(reverse("dashboard-summary"))
+        self.assertEqual(summary.data["total_expenses"], 0.0)
+
+    def test_category_budget_and_custom_category(self):
+        self.register_and_login("budget", "budget@example.com")
+        cat = self.client.post(reverse("v3-category-list"), {"name": "Coffee", "category_type": "EXPENSE"}, format="json")
+        self.assertEqual(cat.status_code, 201, cat.data)
+        budget = self.client.post(reverse("v3-budget-list"), {"category": "Coffee", "amount": "1000"}, format="json")
+        self.assertEqual(budget.status_code, 201, budget.data)
+        self.assertEqual(float(budget.data["amount"]), 1000.0)
+
+    def test_recurring_engine_creates_due_transaction_once(self):
+        user = self.register_and_login("recurring", "recurring@example.com")
+        account = Account.objects.filter(user=user).first()
+        rule = self.client.post(
+            reverse("v3-recurring-list"),
+            {
+                "title": "Salary",
+                "amount": "50000",
+                "transaction_type": "INCOME",
+                "category": "Salary",
+                "account": account.id,
+                "frequency": "MONTHLY",
+                "next_run": "2026-09-21",
+            },
+            format="json",
+        )
+        self.assertEqual(rule.status_code, 201, rule.data)
+        processed = self.client.post(reverse("v3-recurring-process"), {}, format="json")
+        self.assertEqual(processed.status_code, 200, processed.data)
+        self.assertEqual(processed.data["created_count"], 1)
+        processed_again = self.client.post(reverse("v3-recurring-process"), {}, format="json")
+        self.assertEqual(processed_again.data["created_count"], 0)
+        self.assertTrue(Expense.objects.filter(user=user, title="Salary", is_recurring=True).exists())
+
+    def test_credit_card_purchase_and_payment(self):
+        user = self.register_and_login("carduser", "card@example.com")
+        account = Account.objects.filter(user=user).first()
+        account.balance = Decimal("5000")
+        account.save(update_fields=["balance"])
+        card = self.client.post(
+            reverse("v3-card-list"),
+            {"name": "Travel Card", "last4": "1234", "credit_limit": "10000", "linked_account": account.id},
+            format="json",
+        )
+        self.assertEqual(card.status_code, 201, card.data)
+        purchase = self.client.post(
+            reverse("v3-card-activity", kwargs={"pk": card.data["id"]}),
+            {"activity_type": "PURCHASE", "amount": "1000", "date": "2026-09-21"},
+            format="json",
+        )
+        self.assertEqual(purchase.status_code, 201, purchase.data)
+        payment = self.client.post(
+            reverse("v3-card-activity", kwargs={"pk": card.data["id"]}),
+            {"activity_type": "PAYMENT", "amount": "400", "payment_account": account.id, "date": "2026-09-22"},
+            format="json",
+        )
+        self.assertEqual(payment.status_code, 201, payment.data)
+        detail = self.client.get(reverse("v3-card-detail", kwargs={"pk": card.data["id"]}))
+        self.assertEqual(detail.data["outstanding"], "600.00")
+        account.refresh_from_db()
+        self.assertEqual(account.balance, Decimal("4600.00"))
+
+    def test_notifications_and_insights_endpoints(self):
+        self.register_and_login("notify", "notify@example.com")
+        self.client.post(reverse("bill-list-create"), {"title": "Internet", "amount": "999", "due_date": "2026-09-21"}, format="json")
+        synced = self.client.post(reverse("v3-notification-sync"), {}, format="json")
+        self.assertEqual(synced.status_code, 200, synced.data)
+        notes = self.client.get(reverse("v3-notifications"))
+        self.assertEqual(notes.status_code, 200)
+        self.assertGreaterEqual(len(notes.data), 1)
+        insights = self.client.get(reverse("v3-insights"))
+        self.assertEqual(insights.status_code, 200)
+        self.assertIn("insights", insights.data)
+
+    def test_backup_export_and_security_status(self):
+        self.register_and_login("backup", "backup@example.com")
+        exported = self.client.get(reverse("v3-backup-export"))
+        self.assertEqual(exported.status_code, 200)
+        self.assertEqual(exported.json()["version"], 3)
+        security = self.client.get(reverse("v3-security-status"))
+        self.assertEqual(security.status_code, 200)
+        self.assertFalse(security.data["two_factor_enabled"])
+
+
+    def test_two_factor_login_flow(self):
+        self.register_and_login("twofactor", "twofactor@example.com")
+        setup = self.client.post(reverse("v3-2fa-setup"), {}, format="json")
+        self.assertEqual(setup.status_code, 200, setup.data)
+        code = totp_code(setup.data["secret"])
+        confirmed = self.client.post(reverse("v3-2fa-confirm"), {"code": code}, format="json")
+        self.assertEqual(confirmed.status_code, 200, confirmed.data)
+        self.client.credentials()
+        challenge = self.client.post(reverse("token_obtain_pair"), {"username": "twofactor", "password": "StrongPass123!"}, format="json")
+        self.assertEqual(challenge.status_code, 202, challenge.data)
+        token = self.client.post(reverse("token_obtain_pair"), {"username": "twofactor", "password": "StrongPass123!", "otp": totp_code(setup.data["secret"])}, format="json")
+        self.assertEqual(token.status_code, 200, token.data)
+        self.assertIn("access", token.data)
+
+    def test_password_reset_confirm(self):
+        user = self.register_and_login("resetuser", "reset@example.com")
+        self.client.credentials()
+        code = "654321"
+        SecurityCode.objects.create(user=user, purpose="PASSWORD_RESET", code_digest=make_password(code), expires_at=timezone.now()+timedelta(minutes=10))
+        response = self.client.post(reverse("v3-password-reset-confirm"), {"email": "reset@example.com", "code": code, "new_password": "AnotherStrong789!"}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        user.refresh_from_db()
+        self.assertTrue(user.check_password("AnotherStrong789!"))

@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, BarChart3, Camera, CircleDollarSign, Plus, ReceiptText, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { useFinance } from '../context/FinanceContext';
+import api from '../services/api';
 import { EmptyState, MetricCard, PageHeader, Progress, Skeleton, Surface, TransactionIcon, money } from '../components/Ui';
 
 const palette = ['var(--accent)', '#8c7bff', '#ffb454', '#ff6b7a', '#46d7a6', '#7dd3fc'];
@@ -10,6 +11,8 @@ const palette = ['var(--accent)', '#8c7bff', '#ffb454', '#ff6b7a', '#46d7a6', '#
 export default function Overview() {
   const navigate = useNavigate();
   const { profile, accounts, transactions, summary, loading, error } = useFinance();
+  const [insights,setInsights]=useState([]);
+  useEffect(()=>{let live=true;api.get('/api/v3/insights/').then(r=>{if(live)setInsights(r.data?.insights||[])}).catch(()=>{});return()=>{live=false}},[transactions.length]);
   const symbol = profile?.currency || '₹';
   const now = new Date();
   const monthTx = useMemo(() => transactions.filter((tx) => {
@@ -52,6 +55,11 @@ export default function Overview() {
         {categoryData.length ? <div className="donut-layout"><div className="donut"><ResponsiveContainer width="100%" height={190}><PieChart><Pie data={categoryData} dataKey="value" nameKey="name" innerRadius={55} outerRadius={78} paddingAngle={3}>{categoryData.map((_, i) => <Cell key={i} fill={palette[i % palette.length]}/>)}</Pie><Tooltip formatter={(v) => money(v, symbol)} contentStyle={{background:'var(--panel-strong)',border:'1px solid var(--border)',borderRadius:12}}/></PieChart></ResponsiveContainer><div className="donut-center"><span>Spent</span><strong>{money(monthSpend, symbol)}</strong></div></div><div className="legend">{categoryData.slice(0,4).map((item,i)=><div key={item.name}><span className="dot" style={{background:palette[i]}}/><span>{item.name}</span><strong>{money(item.value,symbol)}</strong></div>)}</div></div> : <EmptyState title="No spend yet" description="Add an expense and your category mix appears here."/>}
       </Surface>
     </section>
+
+    {insights.length > 0 && <Surface className="insights-surface">
+      <div className="section-heading"><div><span>SMART INSIGHTS</span><h2>What changed</h2></div></div>
+      <div className="insight-grid">{insights.slice(0,4).map((item,i)=><div className="smart-insight" key={`${item.kind}-${i}`}><strong>{item.title}</strong><span>{item.message}</span></div>)}</div>
+    </Surface>}
 
     <section className="quick-grid">
       <button className="quick-card" onClick={() => navigate('/add')}><div className="quick-icon"><Plus size={22}/></div><div><strong>Add transaction</strong><span>Expense, income or bill</span></div><ArrowRight size={17}/></button>

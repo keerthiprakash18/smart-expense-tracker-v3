@@ -7,6 +7,18 @@ from .views import (
     MoneyDebtListCreateView, ReceiptScanView, RegisterView, SavingsGoalDetailView,
     SavingsGoalListCreateView, UserProfileView,
 )
+from .v3_views import (
+    AccountTransferListCreateView, BackupExportView, BackupImportView, CalendarView,
+    CategoryBudgetDetailView, CategoryBudgetListCreateView, CategoryDetailView,
+    CategoryListCreateView, CreditCardActivityView, CreditCardDetailView,
+    CreditCardListCreateView, CsvImportView, EmailVerificationConfirmView,
+    EmailVerificationRequestView, MerchantRuleListView, NotificationDetailView,
+    NotificationListView, NotificationMarkAllReadView, NotificationSyncView,
+    PasswordResetConfirmView, PasswordResetRequestView, ReceiptVaultView,
+    RecurringProcessView, RecurringRuleDetailView, RecurringRuleListCreateView,
+    SecurityStatusView, SmartInsightsView, TwoFactorConfirmView,
+    TwoFactorDisableView, TwoFactorSetupView,
+)
 
 urlpatterns = [
     path("health/", HealthView.as_view(), name="health"),
@@ -26,4 +38,38 @@ urlpatterns = [
     path("money-debts/<int:debt_id>/payments/", DebtPaymentListCreateView.as_view(), name="debt-payment-list-create"),
     path("dashboard/", DashboardSummaryView.as_view(), name="dashboard-summary"),
     path("scan-receipt/", ReceiptScanView.as_view(), name="scan-receipt"),
+
+    # V3 finance engine
+    path("v3/categories/", CategoryListCreateView.as_view(), name="v3-category-list"),
+    path("v3/categories/<int:pk>/", CategoryDetailView.as_view(), name="v3-category-detail"),
+    path("v3/category-budgets/", CategoryBudgetListCreateView.as_view(), name="v3-budget-list"),
+    path("v3/category-budgets/<int:pk>/", CategoryBudgetDetailView.as_view(), name="v3-budget-detail"),
+    path("v3/recurring/", RecurringRuleListCreateView.as_view(), name="v3-recurring-list"),
+    path("v3/recurring/<int:pk>/", RecurringRuleDetailView.as_view(), name="v3-recurring-detail"),
+    path("v3/recurring/process/", RecurringProcessView.as_view(), name="v3-recurring-process"),
+    path("v3/transfers/", AccountTransferListCreateView.as_view(), name="v3-transfer-list"),
+    path("v3/credit-cards/", CreditCardListCreateView.as_view(), name="v3-card-list"),
+    path("v3/credit-cards/<int:pk>/", CreditCardDetailView.as_view(), name="v3-card-detail"),
+    path("v3/credit-cards/<int:pk>/activity/", CreditCardActivityView.as_view(), name="v3-card-activity"),
+    path("v3/merchant-rules/", MerchantRuleListView.as_view(), name="v3-merchant-rules"),
+    path("v3/receipts/", ReceiptVaultView.as_view(), name="v3-receipt-vault"),
+    path("v3/calendar/", CalendarView.as_view(), name="v3-calendar"),
+    path("v3/insights/", SmartInsightsView.as_view(), name="v3-insights"),
+    path("v3/notifications/", NotificationListView.as_view(), name="v3-notifications"),
+    path("v3/notifications/<int:pk>/", NotificationDetailView.as_view(), name="v3-notification-detail"),
+    path("v3/notifications/sync/", NotificationSyncView.as_view(), name="v3-notification-sync"),
+    path("v3/notifications/read-all/", NotificationMarkAllReadView.as_view(), name="v3-notification-read-all"),
+    path("v3/backup/export/", BackupExportView.as_view(), name="v3-backup-export"),
+    path("v3/backup/import/", BackupImportView.as_view(), name="v3-backup-import"),
+    path("v3/import/csv/", CsvImportView.as_view(), name="v3-csv-import"),
+
+    # Security
+    path("v3/security/", SecurityStatusView.as_view(), name="v3-security-status"),
+    path("v3/security/email/request/", EmailVerificationRequestView.as_view(), name="v3-email-request"),
+    path("v3/security/email/confirm/", EmailVerificationConfirmView.as_view(), name="v3-email-confirm"),
+    path("v3/security/2fa/setup/", TwoFactorSetupView.as_view(), name="v3-2fa-setup"),
+    path("v3/security/2fa/confirm/", TwoFactorConfirmView.as_view(), name="v3-2fa-confirm"),
+    path("v3/security/2fa/disable/", TwoFactorDisableView.as_view(), name="v3-2fa-disable"),
+    path("v3/password-reset/request/", PasswordResetRequestView.as_view(), name="v3-password-reset-request"),
+    path("v3/password-reset/confirm/", PasswordResetConfirmView.as_view(), name="v3-password-reset-confirm"),
 ]

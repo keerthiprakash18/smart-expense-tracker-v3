@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import ReceiptScannerModal from '../components/ReceiptScannerModal';
 import { PageHeader, Surface } from '../components/Ui';
 import { useFinance } from '../context/FinanceContext';
+import api from '../services/api';
 
 const categories = {
   EXPENSE: ['Food & Dining','Groceries','Shopping','Travel & Fuel','Health','Entertainment','Education','General'],
@@ -19,6 +20,7 @@ export default function TransactionEditor() {
   const editing = Boolean(id);
   const existing = useMemo(()=>transactions.find((x)=>String(x.id)===String(id)),[transactions,id]);
   const [scanOpen,setScanOpen]=useState(false);
+  const [customCategories,setCustomCategories]=useState([]);
   const [saving,setSaving]=useState(false);
   const [form,setForm]=useState({ transaction_type:'EXPENSE', title:'', amount:'', category:'Food & Dining', account:'', payment_method:'UPI', date:new Date().toISOString().slice(0,10), time:new Date().toTimeString().slice(0,5), notes:'', is_recurring:false });
 
@@ -28,8 +30,11 @@ export default function TransactionEditor() {
   },[editing,existing,accounts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(()=>{ if (!editing && new URLSearchParams(location.search).get('scan')==='1') setScanOpen(true); },[editing,location.search]);
+  useEffect(()=>{let live=true;api.get('/api/v3/categories/').then(r=>{if(live)setCustomCategories(r.data||[])}).catch(()=>{});return()=>{live=false}},[]);
   const set=(key,value)=>setForm((prev)=>({...prev,[key]:value}));
-  const typeCats=categories[form.transaction_type] || categories.EXPENSE;
+  const baseCats=categories[form.transaction_type] || categories.EXPENSE;
+  const customCats=customCategories.filter(x=>x.category_type===form.transaction_type || (form.transaction_type==='BILL' && x.category_type==='EXPENSE')).map(x=>x.name);
+  const typeCats=[...new Set([...baseCats,...customCats])];
   useEffect(()=>{ if (!typeCats.includes(form.category)) set('category',typeCats[0]); },[form.transaction_type]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit=async(e)=>{

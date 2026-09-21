@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
@@ -16,7 +17,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Account, Bill, DebtPayment, Expense, MoneyDebt, SavingsGoal, UserProfile
+from .models import Account, Bill, DebtPayment, Expense, MerchantRule, MoneyDebt, SavingsGoal, UserProfile
 from .ocr_service import IndiaReceiptExtractor
 from .serializers import (
     AccountSerializer, BillSerializer, DebtPaymentSerializer, ExpenseSerializer,
@@ -571,27 +572,18 @@ class ReceiptScanView(APIView):
 
             image = ImageOps.exif_transpose(image).convert("RGB")
             gray = ImageEnhance.Sharpness(
-                ImageEnhance.Contrast(
-                    ImageOps.autocontrast(ImageOps.grayscale(image))
-                ).enhance(2.2)
+                ImageEnhance.Contrast(ImageOps.autocontrast(ImageOps.grayscale(image))).enhance(2.2)
             ).enhance(2.0)
-
             if max(gray.size) < 1800:
                 scale = max(2, round(1800 / max(gray.size)))
                 gray = gray.resize((gray.width * scale, gray.height * scale))
-
-            thresholds = [
-                gray,
-                gray.point(lambda p: 255 if p > 160 else 0),
-                gray.point(lambda p: 255 if p > 185 else 0),
-            ]
+            variants = [gray, gray.point(lambda p: 255 if p > 160 else 0), gray.point(lambda p: 255 if p > 185 else 0)]
             texts = []
-            for variant in thresholds:
+            for variant in variants:
                 for config in ("--oem 3 --psm 6", "--oem 3 --psm 11"):
                     text = pytesseract.image_to_string(variant, config=config).strip()
                     if text:
                         texts.append(text)
-
             return max(texts, key=len) if texts else ""
 
         try:
@@ -600,16 +592,11 @@ class ReceiptScanView(APIView):
 
                 file_obj.seek(0)
                 reader = pypdf.PdfReader(file_obj)
-                extracted_text = "\n".join(
-                    (page.extract_text() or "") for page in reader.pages
-                ).strip()
-
-                # Image-only/scanned PDFs usually have little or no embedded text.
-                # Render the first pages and OCR them so phone-scanned bills work too.
+                extracted_text = "\n".join((page.extract_text() or "") for page in reader.pages).strip()
                 if len(extracted_text) < 40:
                     import pymupdf
-                    from PIL import Image
                     from io import BytesIO
+                    from PIL import Image
 
                     file_obj.seek(0)
                     document = pymupdf.open(stream=file_obj.read(), filetype="pdf")
@@ -627,8 +614,7 @@ class ReceiptScanView(APIView):
                 from PIL import Image
 
                 file_obj.seek(0)
-                image = Image.open(file_obj)
-                extracted_text = run_receipt_ocr(image)
+                extracted_text = run_receipt_ocr(Image.open(file_obj))
         except Exception as exc:
             return Response(
                 {"error": "Receipt text extraction failed.", "detail": str(exc)},
@@ -643,6 +629,14 @@ class ReceiptScanView(APIView):
 
         parsed = IndiaReceiptExtractor.parse_document(extracted_text, filename)
         parsed["currency"] = detect_currency_from_text(extracted_text + " " + filename)
+        merchant_key = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]+", " ", str(parsed.get("merchant") or "").lower())).strip()[:160]
+        learned = MerchantRule.objects.filter(user=request.user, merchant_key=merchant_key).first() if merchant_key else None
+        if learned:
+            parsed["category"] = learned.category
+            parsed["payment_method"] = learned.payment_method
+            parsed["merchant_memory"] = True
+        else:
+            parsed["merchant_memory"] = False
         parsed_amount = safe_decimal(parsed.get("amount"))
         parsed_date = parsed.get("date") or None
 

@@ -129,10 +129,7 @@ export default function ReceiptScannerModal({
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
-    if (file) {
-      createPreview(file);
-      scanReceipt(file);
-    }
+    if (file) { createPreview(file); scanReceipt(file); }
     event.target.value = '';
   };
 
@@ -191,9 +188,7 @@ export default function ReceiptScannerModal({
       setDuplicateMatch(response.data?.is_duplicate ? response.data?.duplicate_match || {} : null);
       setMode('result');
     } catch (err) {
-      const message = err.response?.data?.detail
-        ? `${err.response?.data?.error || 'Receipt scanning failed.'} ${err.response.data.detail}`
-        : err.response?.data?.error || 'Receipt scanning failed. Please try another clear receipt image.';
+      const message = err.response?.data?.detail ? `${err.response?.data?.error || 'Receipt scanning failed.'} ${err.response.data.detail}` : err.response?.data?.error || 'Receipt scanning failed. Please try another clear receipt image.';
       setError(message);
     } finally {
       setLoading(false);
@@ -242,7 +237,6 @@ export default function ReceiptScannerModal({
       ].filter(Boolean);
       const enrichedNotes = [notes, ...metadata].filter(Boolean).join(' • ');
       const confidence = Math.round(Number(result.confidence?.overall || 0) * 100);
-
       const success = await onConfirmExpense?.({
         title: result.merchant || 'Scanned Receipt',
         amount,
@@ -347,12 +341,7 @@ export default function ReceiptScannerModal({
           <div>
             <div style={styles.success}><CheckCircle2 size={18} /> Receipt scanned automatically. Verify the fields before saving.</div>
             {duplicateMatch && <div style={styles.warning}><AlertTriangle size={16} /> Possible duplicate: {duplicateMatch.title || 'existing transaction'} • {duplicateMatch.date || ''} • {duplicateMatch.amount || ''}</div>}
-            <div style={styles.resultMeta}>
-              <span style={styles.metaPill}>Confidence <strong>{Math.round(Number(result.confidence?.overall || 0) * 100)}%</strong></span>
-              {result.tax_amount > 0 && <span style={styles.metaPill}>Tax <strong>{result.tax_amount}</strong></span>}
-              {result.gstin && <span style={styles.metaPill}>GSTIN <strong>{result.gstin}</strong></span>}
-              {result.upi_ref && <span style={styles.metaPill}>UPI Ref <strong>{result.upi_ref}</strong></span>}
-            </div>
+            <div style={styles.resultMeta}><span style={styles.metaPill}>Confidence <strong>{Math.round(Number(result.confidence?.overall || 0) * 100)}%</strong></span>{result.merchant_memory && <span style={styles.metaPill}>Merchant memory <strong>Matched</strong></span>}{result.tax_amount > 0 && <span style={styles.metaPill}>Tax <strong>{result.tax_amount}</strong></span>}{result.gstin && <span style={styles.metaPill}>GSTIN <strong>{result.gstin}</strong></span>}{result.upi_ref && <span style={styles.metaPill}>UPI Ref <strong>{result.upi_ref}</strong></span>}</div>
             <div style={styles.resultGrid}>
               <label style={styles.label}>Amount<input value={result.amount || ''} onChange={(e) => setResult((p) => ({ ...p, amount: e.target.value }))} inputMode="decimal" style={styles.input} /></label>
               <label style={styles.label}>Transaction Date<input type="date" value={result.date || ''} onChange={(e) => setResult((p) => ({ ...p, date: e.target.value }))} style={styles.input} /></label>
@@ -394,9 +383,9 @@ const styles = {
   secondary: { minHeight: 48, padding: '0 18px', border: '1px solid rgba(255,255,255,.12)', borderRadius: 14, background: 'rgba(255,255,255,.05)', color: '#fff', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
   error: { padding: 12, borderRadius: 12, background: 'rgba(255,69,58,.12)', border: '1px solid rgba(255,69,58,.25)', color: '#ffb4ae', marginBottom: 14, fontSize: 13 },
   success: { padding: 12, borderRadius: 12, background: 'rgba(48,209,88,.10)', border: '1px solid rgba(48,209,88,.22)', color: '#8ff0aa', marginBottom: 14, display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 },
-  warning: { marginTop: 12, padding: 12, borderRadius: 12, background: 'rgba(255,159,10,.10)', border: '1px solid rgba(255,159,10,.20)', color: '#ffc86a', fontSize: 12, display: 'flex', gap: 8, alignItems: 'center' },
-  resultMeta: { display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  metaPill: { padding: '8px 10px', borderRadius: 999, background: 'rgba(255,255,255,.05)', border: '1px solid rgba(255,255,255,.08)', color: '#AAB7CA', fontSize: 11, display: 'inline-flex', gap: 5, alignItems: 'center' },
+  warning: { marginTop: 12, padding: 12, borderRadius: 12, background: 'rgba(255,159,10,.10)', border: '1px solid rgba(255,159,10,.20)', color: '#ffc86a', fontSize: 12, display:'flex',gap:8,alignItems:'center' },
+  resultMeta: { display:'flex',flexWrap:'wrap',gap:8,marginBottom:12 },
+  metaPill: { padding:'8px 10px',borderRadius:999,background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)',color:'#AAB7CA',fontSize:11,display:'inline-flex',gap:5,alignItems:'center' },
   resultGrid: { display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 12 },
   label: { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11, fontWeight: 800, opacity: .9 },
   input: { width: '100%', boxSizing: 'border-box', minHeight: 44, borderRadius: 12, border: '1px solid rgba(255,255,255,.10)', background: '#181a21', color: '#fff', padding: '0 12px', outline: 'none' }

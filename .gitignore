@@ -1,9 +1,30 @@
-node_modules/
-venv/
+# Python / Django
+pydeps/
+backend/venv/
+backend/.venv/
+backend/**/__pycache__/
+backend/*.sqlite3
+backend/media/
+backend/staticfiles/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/android/.gradle/
+frontend/android/.idea/
+frontend/android/app/build/
+frontend/android/local.properties
+
+# Secrets
 .env
-.env.local
-.env.production
-db.sqlite3
-__pycache__/
-dist/
-build/
+.env.*
+!.env.example
+backend/.env
+frontend/.env.local
+frontend/.env.production
+
+# IDE / OS
+.idea/
+.DS_Store
+Thumbs.db
+*.log
