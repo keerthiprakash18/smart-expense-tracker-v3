@@ -17,4 +17,4 @@ COPY . .
 
 RUN SECRET_KEY=build-only-secret DEBUG=False python manage.py collectstatic --noinput
 
-CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py flushexpiredtokens && gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && python manage.py flushexpiredtokens && gunicorn config.wsgi:application --preload --bind 0.0.0.0:${PORT:-8000} --workers 2 --timeout 120"]

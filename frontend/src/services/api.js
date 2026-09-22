@@ -1,5 +1,13 @@
 import axios from "axios";
 
+const AUTH_STORAGE_VERSION = "2026-09-22-reset-v1";
+const storedAuthVersion = localStorage.getItem("smart_expense_auth_version");
+if (storedAuthVersion !== AUTH_STORAGE_VERSION) {
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("refresh_token");
+  localStorage.setItem("smart_expense_auth_version", AUTH_STORAGE_VERSION);
+}
+
 const configuredBaseUrl = (import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
 
 // Development uses Vite's /api proxy when VITE_API_URL is omitted.

@@ -38,3 +38,16 @@ Register -> Login -> Add account -> Income -> Expense -> Edit/Delete -> Transfer
 - Railway API: the app has application-level throttling and request guards. During an active layer-7 attack, Railway's Under Attack Mode can be enabled from the service Edge settings.
 - If a custom API domain is introduced later, placing Cloudflare WAF in front of it adds configurable managed WAF rules and bot controls.
 - Keep PostgreSQL private; do not expose a public TCP proxy unless it is temporarily required for administration.
+
+
+## One-time full database reset
+Run only when a complete clean slate is intentionally required:
+
+```bash
+python manage.py reset_production_data --confirm RESET_ALL_DATA
+```
+
+This uses Django flush: it removes application/auth/token data but keeps the database schema and migrations. After a reset, all users must register again and all old browser sessions are invalid.
+
+## Authentication stability
+Set a persistent Railway `SECRET_KEY` environment variable. Gunicorn runs with `--preload` so all workers share the same Django settings instance, but a persistent environment secret is still required so sessions/tokens survive service restarts and deployments.

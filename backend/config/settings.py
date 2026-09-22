@@ -10,6 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DEBUG = os.getenv("DEBUG", "False").lower() in {"1", "true", "yes", "on"}
 _secret_from_env = os.getenv("SECRET_KEY", "").strip()
 SECRET_KEY = _secret_from_env or ("django-insecure-local-development-only" if DEBUG else secrets.token_urlsafe(64))
+SECRET_KEY_CONFIGURED = bool(_secret_from_env)
 
 
 def env_list(name, default=""):
