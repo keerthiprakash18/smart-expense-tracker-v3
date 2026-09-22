@@ -1,4 +1,5 @@
 import os
+import secrets
 from datetime import timedelta
 from pathlib import Path
 
@@ -7,7 +8,8 @@ import dj_database_url
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 DEBUG = os.getenv("DEBUG", "False").lower() in {"1", "true", "yes", "on"}
-SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-local-development-only")
+_secret_from_env = os.getenv("SECRET_KEY", "").strip()
+SECRET_KEY = _secret_from_env or ("django-insecure-local-development-only" if DEBUG else secrets.token_urlsafe(64))
 
 
 def env_list(name, default=""):
@@ -24,12 +26,14 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "expenses",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "expenses.security_middleware.SecurityFirewallMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -127,7 +131,8 @@ EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() in {"1", "true", "yes", "on"}
-EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "20"))
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "10"))
+EMAIL_SECURITY_ENABLED = os.getenv("EMAIL_SECURITY_ENABLED", "False").lower() in {"1", "true", "yes", "on"}
 DEFAULT_FROM_EMAIL = os.getenv(
     "DEFAULT_FROM_EMAIL",
     EMAIL_HOST_USER or "Smart Expense <noreply@smartexpense.app>",
@@ -142,22 +147,39 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.ScopedRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "login": os.getenv("THROTTLE_LOGIN", "20/min"),
+        "register": os.getenv("THROTTLE_REGISTER", "30/hour"),
+        "token_refresh": os.getenv("THROTTLE_TOKEN_REFRESH", "60/hour"),
+        "security": os.getenv("THROTTLE_SECURITY", "30/hour"),
+        "password_reset": os.getenv("THROTTLE_PASSWORD_RESET", "20/hour"),
+        "ocr": os.getenv("THROTTLE_OCR", "30/hour"),
+        "imports": os.getenv("THROTTLE_IMPORTS", "20/hour"),
+    },
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=int(os.getenv("JWT_ACCESS_MINUTES", "60"))),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("JWT_REFRESH_DAYS", "30"))),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=int(os.getenv("JWT_ACCESS_MINUTES", "15"))),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("JWT_REFRESH_DAYS", "7"))),
     "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": False,
+    "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-# CORS is open only for local development unless explicitly enabled in production.
+# Strict production CORS. The old allow-all environment flag is ignored outside DEBUG.
 CORS_ALLOW_CREDENTIALS = False
-CORS_ALLOW_ALL_ORIGINS = DEBUG or os.getenv("CORS_ALLOW_ALL_ORIGINS", "False").lower() in {
-    "1", "true", "yes", "on"
-}
-CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS")
+CORS_ALLOW_ALL_ORIGINS = DEBUG
+CORS_ALLOWED_ORIGINS = env_list(
+    "CORS_ALLOWED_ORIGINS",
+    "https://smart-expense-tracker-v3.vercel.app,https://localhost",
+)
+CSRF_TRUSTED_ORIGINS = env_list(
+    "CSRF_TRUSTED_ORIGINS",
+    "https://smart-expense-tracker-v3.vercel.app,https://*.up.railway.app",
+)
 
 # Upload limits are enforced both by Django and ReceiptScanView.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
@@ -172,5 +194,19 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_REFERRER_POLICY = "same-origin"
+    SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+    SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    CSRF_COOKIE_SAMESITE = "Lax"
     X_FRAME_OPTIONS = "DENY"
+
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"standard": {"format": "%(asctime)s %(levelname)s %(name)s %(message)s"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "standard"}},
+    "root": {"handlers": ["console"], "level": LOG_LEVEL},
+}

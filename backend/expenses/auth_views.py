@@ -4,10 +4,11 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import User
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from .models import SecuritySettings
 from .security_utils import verify_totp
@@ -34,6 +35,7 @@ def consume_recovery_code(security, code):
 class LoginView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_scope = "login"
 
     def post(self, request):
         identifier = str(request.data.get("username") or request.data.get("email") or "").strip()
@@ -60,4 +62,24 @@ class LoginView(APIView):
         return Response({"refresh": str(refresh), "access": str(refresh.access_token)}, status=200)
 
 
-__all__ = ["LoginView", "RegisterView", "UserProfileView", "ChangePasswordView"]
+__all__ = ["LoginView", "LogoutView", "ThrottledTokenRefreshView", "RegisterView", "UserProfileView", "ChangePasswordView"]
+
+
+
+class ThrottledTokenRefreshView(TokenRefreshView):
+    throttle_scope = "token_refresh"
+
+
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_scope = "security"
+
+    def post(self, request):
+        refresh_value = str(request.data.get("refresh", "")).strip()
+        if not refresh_value:
+            return Response({"error": "Refresh token is required."}, status=400)
+        try:
+            RefreshToken(refresh_value).blacklist()
+        except Exception:
+            return Response({"error": "Invalid refresh token."}, status=400)
+        return Response({"message": "Signed out securely."})

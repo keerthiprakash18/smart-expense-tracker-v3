@@ -13,6 +13,8 @@ class UserProfile(models.Model):
     dark_mode = models.BooleanField(default=True)
     budget_alerts = models.BooleanField(default=True)
     bill_reminders = models.BooleanField(default=True)
+    terms_accepted_at = models.DateTimeField(null=True, blank=True)
+    privacy_accepted_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"Profile: {self.user.username}"

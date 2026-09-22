@@ -487,6 +487,7 @@ class BackupExportView(APIView):
 
 
 class BackupImportView(APIView):
+    throttle_scope = "imports"
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser]
 
@@ -551,6 +552,7 @@ class BackupImportView(APIView):
 
 
 class CsvImportView(APIView):
+    throttle_scope = "imports"
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
@@ -601,6 +603,8 @@ def get_security(user):
 
 
 def email_delivery_configured():
+    if not getattr(settings, "EMAIL_SECURITY_ENABLED", False):
+        return False
     backend = str(getattr(settings, "EMAIL_BACKEND", ""))
     if backend.endswith("console.EmailBackend"):
         return bool(settings.DEBUG)
@@ -641,6 +645,7 @@ class SecurityStatusView(APIView):
 
 
 class EmailVerificationRequestView(APIView):
+    throttle_scope = "security"
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -666,6 +671,7 @@ class EmailVerificationRequestView(APIView):
 
 
 class EmailVerificationConfirmView(APIView):
+    throttle_scope = "security"
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -682,6 +688,7 @@ class EmailVerificationConfirmView(APIView):
 
 
 class PasswordResetRequestView(APIView):
+    throttle_scope = "password_reset"
     permission_classes = [AllowAny]
     authentication_classes = []
 
@@ -706,6 +713,7 @@ class PasswordResetRequestView(APIView):
 
 
 class PasswordResetConfirmView(APIView):
+    throttle_scope = "password_reset"
     permission_classes = [AllowAny]
     authentication_classes = []
 
@@ -731,6 +739,7 @@ class PasswordResetConfirmView(APIView):
 
 
 class TwoFactorSetupView(APIView):
+    throttle_scope = "security"
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -759,6 +768,7 @@ class TwoFactorSetupView(APIView):
 
 
 class TwoFactorConfirmView(APIView):
+    throttle_scope = "security"
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
@@ -779,6 +789,7 @@ class TwoFactorConfirmView(APIView):
 
 
 class TwoFactorDisableView(APIView):
+    throttle_scope = "security"
     permission_classes = [IsAuthenticated]
 
     def post(self, request):

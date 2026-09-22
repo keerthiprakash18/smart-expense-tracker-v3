@@ -3,10 +3,11 @@ import re
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -98,9 +99,46 @@ class HealthView(APIView):
         return Response({"status": "ok", "service": "smart-expense-tracker-api"})
 
 
+class ReadinessView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+        except Exception:
+            return Response({"status": "not_ready"}, status=503)
+        return Response({"status": "ready"})
+
+
+class DeleteAccountView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_scope = "security"
+
+    def post(self, request):
+        password = request.data.get("password", "")
+        confirmation = str(request.data.get("confirmation", "")).strip().upper()
+        if confirmation != "DELETE":
+            return Response({"error": "Type DELETE to confirm account deletion."}, status=400)
+        if not request.user.check_password(password):
+            return Response({"error": "Password is incorrect."}, status=400)
+        user = request.user
+        with transaction.atomic():
+            for expense in Expense.objects.filter(user=user).exclude(receipt_image="").exclude(receipt_image__isnull=True):
+                try:
+                    expense.receipt_image.delete(save=False)
+                except Exception:
+                    pass
+            user.delete()
+        return Response({"message": "Account and associated data deleted."})
+
+
 class RegisterView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_scope = "register"
 
     def post(self, request):
         name = str(request.data.get("name", "")).strip()
@@ -108,12 +146,17 @@ class RegisterView(APIView):
         username = str(request.data.get("username", "")).strip() or email
         phone = str(request.data.get("phone", "")).strip()
         password = request.data.get("password", "")
+        accepted_terms = request.data.get("accepted_terms") is True
+        accepted_privacy = request.data.get("accepted_privacy") is True
 
         if not username or not password:
             return Response(
                 {"error": "Username/email and password are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        if not accepted_terms or not accepted_privacy:
+            return Response({"error": "You must accept the Terms and Privacy Policy to create an account."}, status=400)
 
         if email and User.objects.filter(email__iexact=email).exists():
             return Response(
@@ -142,11 +185,14 @@ class RegisterView(APIView):
                     password=password,
                     first_name=name,
                 )
+                accepted_at = timezone.now()
                 UserProfile.objects.create(
                     user=user,
                     phone=phone or None,
                     currency="₹",
                     monthly_budget=Decimal("50000.00"),
+                    terms_accepted_at=accepted_at,
+                    privacy_accepted_at=accepted_at,
                 )
                 ensure_default_accounts(user)
         except IntegrityError:
@@ -236,6 +282,7 @@ class UserProfileView(APIView):
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_scope = "security"
 
     def post(self, request):
         old_password = request.data.get("old_password", "")
@@ -543,6 +590,7 @@ class DashboardSummaryView(APIView):
 
 class ReceiptScanView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_scope = "ocr"
     parser_classes = [MultiPartParser, FormParser]
     max_file_size = 10 * 1024 * 1024
 
@@ -563,7 +611,9 @@ class ReceiptScanView(APIView):
         extracted_text = ""
 
         def run_receipt_ocr(image):
-            from PIL import ImageEnhance, ImageOps
+            from PIL import Image, ImageEnhance, ImageOps
+
+            Image.MAX_IMAGE_PIXELS = 25_000_000
             import pytesseract
 
             tesseract_cmd = os.getenv("TESSERACT_CMD", "").strip()
@@ -616,10 +666,10 @@ class ReceiptScanView(APIView):
                 file_obj.seek(0)
                 extracted_text = run_receipt_ocr(Image.open(file_obj))
         except Exception as exc:
-            return Response(
-                {"error": "Receipt text extraction failed.", "detail": str(exc)},
-                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            )
+            payload = {"error": "Receipt text extraction failed."}
+            if settings.DEBUG:
+                payload["detail"] = str(exc)
+            return Response(payload, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
         if not extracted_text.strip():
             return Response(

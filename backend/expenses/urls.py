@@ -2,8 +2,8 @@ from django.urls import path
 
 from .views import (
     AccountDetailView, AccountListCreateView, BillDetailView, BillListCreateView,
-    ChangePasswordView, DashboardSummaryView, DebtPaymentListCreateView,
-    ExpenseDetailView, ExpenseListCreateView, HealthView, MoneyDebtDetailView,
+    ChangePasswordView, DashboardSummaryView, DebtPaymentListCreateView, DeleteAccountView,
+    ExpenseDetailView, ExpenseListCreateView, HealthView, ReadinessView, MoneyDebtDetailView,
     MoneyDebtListCreateView, ReceiptScanView, RegisterView, SavingsGoalDetailView,
     SavingsGoalListCreateView, UserProfileView,
 )
@@ -22,9 +22,11 @@ from .v3_views import (
 
 urlpatterns = [
     path("health/", HealthView.as_view(), name="health"),
+    path("ready/", ReadinessView.as_view(), name="ready"),
     path("register/", RegisterView.as_view(), name="register"),
     path("profile/", UserProfileView.as_view(), name="profile"),
     path("change-password/", ChangePasswordView.as_view(), name="change-password"),
+    path("delete-account/", DeleteAccountView.as_view(), name="delete-account"),
     path("accounts/", AccountListCreateView.as_view(), name="account-list-create"),
     path("accounts/<int:pk>/", AccountDetailView.as_view(), name="account-detail"),
     path("expenses/", ExpenseListCreateView.as_view(), name="expense-list-create"),

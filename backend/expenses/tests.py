@@ -22,6 +22,8 @@ class SmartExpenseApiTests(APITestCase):
                 "email": email,
                 "phone": "+919999999999",
                 "password": password,
+                "accepted_terms": True,
+                "accepted_privacy": True,
             },
             format="json",
         )
@@ -334,3 +336,55 @@ class SmartExpenseApiTests(APITestCase):
         self.assertEqual(response.status_code, 200, response.data)
         user.refresh_from_db()
         self.assertTrue(user.check_password("AnotherStrong789!"))
+
+
+
+class ProductionSecurityTests(APITestCase):
+    def setUp(self):
+        self.username = "secureuser"
+        self.email = "secure@example.com"
+        self.password = "StrongPass123!"
+        register = self.client.post(reverse("register"), {
+            "username": self.username, "name": "Secure User", "email": self.email,
+            "password": self.password, "accepted_terms": True, "accepted_privacy": True,
+        }, format="json")
+        self.assertEqual(register.status_code, 201, register.data)
+
+    def _auth(self):
+        token = self.client.post(reverse("token_obtain_pair"), {"username": self.username, "password": self.password}, format="json")
+        self.assertEqual(token.status_code, 200, token.data)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token.data['access']}")
+        return token.data
+
+    def test_protected_endpoint_rejects_anonymous_user(self):
+        self.assertEqual(self.client.get(reverse("dashboard-summary")).status_code, 401)
+
+    def test_security_headers_are_present(self):
+        response = self.client.get(reverse("health"))
+        self.assertEqual(response["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(response["X-Frame-Options"], "DENY")
+        self.assertEqual(response["Cache-Control"], "no-store, max-age=0")
+        self.assertTrue(response["X-Request-ID"])
+
+    def test_readiness_checks_database(self):
+        response = self.client.get(reverse("ready"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "ready")
+
+    def test_account_deletion_requires_password_and_confirmation(self):
+        self._auth()
+        self.assertEqual(self.client.post(reverse("delete-account"), {"password": self.password, "confirmation": "NO"}, format="json").status_code, 400)
+        deleted = self.client.post(reverse("delete-account"), {"password": self.password, "confirmation": "DELETE"}, format="json")
+        self.assertEqual(deleted.status_code, 200)
+        self.assertFalse(User.objects.filter(username=self.username).exists())
+
+    def test_registration_requires_legal_acceptance(self):
+        response = self.client.post(reverse("register"), {"username": "noaccept", "email": "noaccept@example.com", "password": "StrongPass123!"}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_logout_blacklists_refresh_token(self):
+        tokens = self._auth()
+        response = self.client.post(reverse("logout"), {"refresh": tokens["refresh"]}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.client.credentials()
+        self.assertEqual(self.client.post(reverse("token_refresh"), {"refresh": tokens["refresh"]}, format="json").status_code, 401)
