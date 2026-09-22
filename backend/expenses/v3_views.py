@@ -738,6 +738,54 @@ class PasswordResetConfirmView(APIView):
         return Response({"message": "Password reset successfully."})
 
 
+
+class RecoveryPasswordResetView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_scope = "password_reset"
+
+    def post(self, request):
+        identifier = str(request.data.get("identifier", "")).strip()
+        recovery_code = str(request.data.get("recovery_code", "")).strip().upper()
+        new_password = request.data.get("new_password", "")
+
+        user = User.objects.filter(username__iexact=identifier).first()
+        if user is None:
+            user = User.objects.filter(email__iexact=identifier).first()
+        if not user:
+            return Response({"error": "Invalid account or recovery code."}, status=400)
+
+        sec = SecuritySettings.objects.filter(user=user, two_factor_enabled=True).first()
+        if not sec:
+            return Response({"error": "Recovery-code reset is not enabled for this account."}, status=400)
+
+        try:
+            validate_password(new_password, user=user)
+        except DjangoValidationError as exc:
+            return Response({"error": " ".join(exc.messages)}, status=400)
+
+        try:
+            hashes = json.loads(sec.recovery_codes or "[]")
+        except (TypeError, ValueError):
+            hashes = []
+
+        matched_index = None
+        for index, stored_hash in enumerate(hashes):
+            if check_password(recovery_code, stored_hash):
+                matched_index = index
+                break
+        if matched_index is None:
+            return Response({"error": "Invalid account or recovery code."}, status=400)
+
+        hashes.pop(matched_index)
+        with transaction.atomic():
+            user.set_password(new_password)
+            user.save(update_fields=["password"])
+            sec.recovery_codes = json.dumps(hashes)
+            sec.save(update_fields=["recovery_codes", "updated_at"])
+        return Response({"message": "Password reset successfully. The recovery code has been consumed."})
+
+
 class TwoFactorSetupView(APIView):
     throttle_scope = "security"
     permission_classes = [IsAuthenticated]

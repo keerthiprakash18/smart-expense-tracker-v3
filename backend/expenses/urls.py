@@ -14,7 +14,7 @@ from .v3_views import (
     CreditCardListCreateView, CsvImportView, EmailVerificationConfirmView,
     EmailVerificationRequestView, MerchantRuleListView, NotificationDetailView,
     NotificationListView, NotificationMarkAllReadView, NotificationSyncView,
-    PasswordResetConfirmView, PasswordResetRequestView, ReceiptVaultView,
+    PasswordResetConfirmView, PasswordResetRequestView, RecoveryPasswordResetView, ReceiptVaultView,
     RecurringProcessView, RecurringRuleDetailView, RecurringRuleListCreateView,
     SecurityStatusView, SmartInsightsView, TwoFactorConfirmView,
     TwoFactorDisableView, TwoFactorSetupView,
@@ -74,4 +74,5 @@ urlpatterns = [
     path("v3/security/2fa/disable/", TwoFactorDisableView.as_view(), name="v3-2fa-disable"),
     path("v3/password-reset/request/", PasswordResetRequestView.as_view(), name="v3-password-reset-request"),
     path("v3/password-reset/confirm/", PasswordResetConfirmView.as_view(), name="v3-password-reset-confirm"),
+    path("v3/password-reset/recovery/", RecoveryPasswordResetView.as_view(), name="v3-password-reset-recovery"),
 ]

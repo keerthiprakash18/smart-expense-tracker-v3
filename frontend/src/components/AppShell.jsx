@@ -4,6 +4,7 @@ import { BarChart3, Bell, CircleDollarSign, LayoutDashboard, LogOut, Plus, Recei
 import { useAuth } from '../context/AuthContext';
 import { useFinance } from '../context/FinanceContext';
 import logoFull from '../assets/logo-full.png';
+import api, { getRefreshToken } from '../services/api';
 
 const nav = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
@@ -28,7 +29,7 @@ export default function AppShell() {
     return () => window.clearTimeout(timer);
   }, [toast, setToast]);
 
-  const signOut = () => { logoutUser(); navigate('/login', { replace: true }); };
+  const signOut = async () => { const refresh=getRefreshToken(); try{if(refresh)await api.post('/api/logout/',{refresh})}catch{}finally{logoutUser();navigate('/login',{replace:true})} };
 
   return <div className="app-shell">
     <aside className="sidebar">

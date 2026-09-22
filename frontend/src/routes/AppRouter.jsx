@@ -15,6 +15,7 @@ const Profile = lazy(() => import('../pages/Profile'));
 const Planner = lazy(() => import('../pages/Planner'));
 const ReceiptVault = lazy(() => import('../pages/ReceiptVault'));
 const Notifications = lazy(() => import('../pages/Notifications'));
+const Legal = lazy(() => import('../pages/Legal'));
 
 function RouteLoader() {
   return <div className="boot-screen"><div className="boot-mark" />Loading Smart Expense…</div>;
@@ -36,6 +37,8 @@ export default function AppRouter() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/privacy" element={<Legal type="privacy" />} />
+        <Route path="/terms" element={<Legal type="terms" />} />
         <Route element={<ProtectedApp />}>
           <Route index element={<Overview />} />
           <Route path="transactions" element={<Transactions />} />

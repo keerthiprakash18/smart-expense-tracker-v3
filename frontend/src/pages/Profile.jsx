@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CreditCard, KeyRound, Landmark, MoonStar, Plus, Save, ShieldCheck, Smartphone, User, Wallet } from 'lucide-react';
-import api from '../services/api';
+import api, { clearTokens } from '../services/api';
 import { PageHeader, Surface, money } from '../components/Ui';
 import { useFinance } from '../context/FinanceContext';
 import { useTheme } from '../context/ThemeContext';
@@ -29,6 +29,7 @@ export default function Profile() {
 
     <Surface><div className="section-heading"><div><span>SECURITY</span><h2>Password & access</h2></div><button className="button ghost" onClick={()=>setPasswordOpen(!passwordOpen)}><KeyRound size={17}/> Change password</button></div>{passwordOpen&&<PasswordForm onDone={()=>setPasswordOpen(false)} notify={notify}/>}<div className="settings-note"><ShieldCheck size={20}/><div><strong>Private by design</strong><span>Each API endpoint is authenticated and scoped to your user account.</span></div></div></Surface>
     <SecurityCenter profile={profile} notify={notify}/>
+    <DangerZone notify={notify}/>
   </div>;
 }
 
@@ -220,4 +221,32 @@ function SecurityCenter({notify}) {
       </div>
     }
   </>;
+}
+
+
+function DangerZone({notify}) {
+  const [deleting,setDeleting]=useState(false);
+  const deleteAccount=async()=>{
+    if(!window.confirm('This permanently deletes your Smart Expense account and finance data. Continue?')) return;
+    const password=window.prompt('Enter your current password');
+    if(!password) return;
+    const confirmation=window.prompt('Type DELETE to permanently delete your account');
+    if(confirmation!=='DELETE'){notify('Account deletion cancelled','error');return}
+    setDeleting(true);
+    try{
+      await api.post('/api/delete-account/',{password,confirmation});
+      clearTokens();
+      window.location.hash='#/login';
+      window.location.reload();
+    }catch(err){
+      notify(err.response?.data?.error||'Unable to delete account','error');
+    }finally{setDeleting(false)}
+  };
+  return <Surface>
+    <div className="section-heading">
+      <div><span>DANGER ZONE</span><h2>Delete account & data</h2><p>Permanently deletes your profile and app records. Export a backup first if you need one.</p></div>
+      <ShieldCheck size={20}/>
+    </div>
+    <button className="button ghost" disabled={deleting} onClick={deleteAccount}>{deleting?'Deleting…':'Delete my account'}</button>
+  </Surface>
 }
