@@ -36,7 +36,7 @@ jobs:
       - run: python manage.py makemigrations --check --dry-run
       - run: python manage.py help reset_production_data
       - run: python manage.py test expenses
-      - run: DEBUG=False SECRET_KEY="ci-production-security-key-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ" ALLOWED_HOSTS="example.com" CORS_ALLOWED_ORIGINS="https://example.com" python manage.py check --deploy --fail-level WARNING
+      - run: DATABASE_URL="postgresql://ci:ci@localhost:5432/ci" DEBUG=False SECRET_KEY="ci-production-security-key-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ" ALLOWED_HOSTS="example.com" CORS_ALLOWED_ORIGINS="https://example.com" python manage.py check --deploy --fail-level WARNING
 
   frontend:
     runs-on: ubuntu-latest
