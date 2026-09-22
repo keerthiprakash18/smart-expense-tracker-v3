@@ -23,6 +23,10 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: 'index.html',
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
+        navigateFallbackDenylist: [/^\/api\//, /^\/assets\//],
         globPatterns: ['**/*.{js,css,html,svg,png,webp,woff2}'],
         globIgnores: ['**/smt.png'],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,

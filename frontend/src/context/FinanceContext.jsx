@@ -51,8 +51,12 @@ export function FinanceProvider({ children }) {
       setTransactions(Array.isArray(txRes.data) ? txRes.data : []);
       setSummary({ ...emptySummary, ...(summaryRes.data || {}) });
     } catch (err) {
-      const message = err.response?.data?.error || err.response?.data?.detail || 'Unable to load your finance workspace.';
-      setError(message);
+      if (err.response?.status === 401) {
+        setError('');
+      } else {
+        const message = err.response?.data?.error || err.response?.data?.detail || 'Unable to load your finance workspace.';
+        setError(message);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);

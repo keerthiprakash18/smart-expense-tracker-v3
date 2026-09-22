@@ -5,7 +5,7 @@ import React, {
   useState,
 } from "react";
 
-import {
+import api, {
   getAccessToken,
   clearTokens,
 } from "../services/api";
@@ -17,9 +17,46 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const existingToken = getAccessToken();
-    setToken(existingToken);
-    setLoading(false);
+    let active = true;
+
+    const expire = () => {
+      if (!active) return;
+      clearTokens();
+      setToken(null);
+      setLoading(false);
+    };
+
+    const validateStoredSession = async () => {
+      const existingToken = getAccessToken();
+      if (!existingToken) {
+        if (active) {
+          setToken(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        // This request also exercises refresh-token recovery through api.js.
+        await api.get("/api/profile/");
+        if (active) setToken(getAccessToken());
+      } catch {
+        if (active) {
+          clearTokens();
+          setToken(null);
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    window.addEventListener("smart-expense-auth-expired", expire);
+    validateStoredSession();
+
+    return () => {
+      active = false;
+      window.removeEventListener("smart-expense-auth-expired", expire);
+    };
   }, []);
 
   const loginUser = (accessToken, refreshToken = null) => {

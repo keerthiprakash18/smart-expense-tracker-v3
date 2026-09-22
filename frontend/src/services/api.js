@@ -26,6 +26,11 @@ export const clearTokens = () => {
   localStorage.removeItem("refresh_token");
 };
 
+export const notifyAuthExpired = () => {
+  clearTokens();
+  window.dispatchEvent(new CustomEvent("smart-expense-auth-expired"));
+};
+
 api.interceptors.request.use((config) => {
   const token = getAccessToken();
   config.headers = config.headers || {};
@@ -81,10 +86,10 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${access}`;
         return api(originalRequest);
       } catch {
-        clearTokens();
+        notifyAuthExpired();
       }
     } else if (error.response?.status === 401 && !isAuthEndpoint) {
-      clearTokens();
+      notifyAuthExpired();
     }
 
     return Promise.reject(error);
