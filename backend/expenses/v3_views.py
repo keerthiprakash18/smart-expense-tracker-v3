@@ -602,6 +602,23 @@ def get_security(user):
     return obj
 
 
+def consume_security_recovery_code(security, code):
+    candidate = str(code or "").strip().upper()
+    if not candidate:
+        return False
+    try:
+        hashes = json.loads(security.recovery_codes or "[]")
+    except (TypeError, ValueError):
+        hashes = []
+    for index, stored_hash in enumerate(hashes):
+        if check_password(candidate, stored_hash):
+            hashes.pop(index)
+            security.recovery_codes = json.dumps(hashes)
+            security.save(update_fields=["recovery_codes", "updated_at"])
+            return True
+    return False
+
+
 def email_delivery_configured():
     if not getattr(settings, "EMAIL_SECURITY_ENABLED", False):
         return False
@@ -764,25 +781,12 @@ class RecoveryPasswordResetView(APIView):
         except DjangoValidationError as exc:
             return Response({"error": " ".join(exc.messages)}, status=400)
 
-        try:
-            hashes = json.loads(sec.recovery_codes or "[]")
-        except (TypeError, ValueError):
-            hashes = []
-
-        matched_index = None
-        for index, stored_hash in enumerate(hashes):
-            if check_password(recovery_code, stored_hash):
-                matched_index = index
-                break
-        if matched_index is None:
+        if not consume_security_recovery_code(sec, recovery_code):
             return Response({"error": "Invalid account or recovery code."}, status=400)
 
-        hashes.pop(matched_index)
         with transaction.atomic():
             user.set_password(new_password)
             user.save(update_fields=["password"])
-            sec.recovery_codes = json.dumps(hashes)
-            sec.save(update_fields=["recovery_codes", "updated_at"])
         return Response({"message": "Password reset successfully. The recovery code has been consumed."})
 
 
@@ -844,8 +848,9 @@ class TwoFactorDisableView(APIView):
         sec = get_security(request.user)
         if not request.user.check_password(request.data.get("password", "")):
             return Response({"error": "Password is incorrect."}, status=400)
-        if sec.two_factor_enabled and not verify_totp(sec.totp_secret, request.data.get("code")):
-            return Response({"error": "Invalid authenticator code."}, status=400)
+        code = request.data.get("code")
+        if sec.two_factor_enabled and not verify_totp(sec.totp_secret, code) and not consume_security_recovery_code(sec, code):
+            return Response({"error": "Invalid authenticator or recovery code."}, status=400)
         sec.two_factor_enabled = False
         sec.totp_secret = ""
         sec.recovery_codes = "[]"

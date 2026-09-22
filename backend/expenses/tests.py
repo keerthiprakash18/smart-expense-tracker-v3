@@ -391,7 +391,8 @@ class ProductionSecurityTests(APITestCase):
 
 
     def test_recovery_code_can_reset_password_once(self):
-        user = self.register_and_login("recoverme", "recover@example.com")
+        self._auth()
+        user = User.objects.get(username=self.username)
         setup = self.client.post(reverse("v3-2fa-setup"), {}, format="json")
         confirmed = self.client.post(reverse("v3-2fa-confirm"), {"code": totp_code(setup.data["secret"])}, format="json")
         self.assertEqual(confirmed.status_code, 200, confirmed.data)
@@ -400,7 +401,7 @@ class ProductionSecurityTests(APITestCase):
 
         reset = self.client.post(
             reverse("v3-password-reset-recovery"),
-            {"identifier": "recover@example.com", "recovery_code": recovery, "new_password": "RecoveredPass456!"},
+            {"identifier": self.email, "recovery_code": recovery, "new_password": "RecoveredPass456!"},
             format="json",
         )
         self.assertEqual(reset.status_code, 200, reset.data)
@@ -409,7 +410,7 @@ class ProductionSecurityTests(APITestCase):
 
         reused = self.client.post(
             reverse("v3-password-reset-recovery"),
-            {"identifier": "recover@example.com", "recovery_code": recovery, "new_password": "AnotherPass789!"},
+            {"identifier": self.email, "recovery_code": recovery, "new_password": "AnotherPass789!"},
             format="json",
         )
         self.assertEqual(reused.status_code, 400, reused.data)

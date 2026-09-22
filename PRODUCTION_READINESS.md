@@ -31,3 +31,10 @@ For permanent receipt retention, configure S3-compatible storage such as Cloudfl
 
 ## Release smoke test
 Register -> Login -> Add account -> Income -> Expense -> Edit/Delete -> Transfer -> Recurring -> Budget -> Receipt OCR -> Receipt Vault -> Planner -> Notifications -> Backup export -> 2FA -> Recovery-code login -> Logout -> Account deletion (test account only).
+
+
+## Edge firewall / DDoS
+- Vercel frontend: keep Vercel Firewall/DDoS protections enabled; use rate-limit or challenge rules if abusive traffic appears.
+- Railway API: the app has application-level throttling and request guards. During an active layer-7 attack, Railway's Under Attack Mode can be enabled from the service Edge settings.
+- If a custom API domain is introduced later, placing Cloudflare WAF in front of it adds configurable managed WAF rules and bot controls.
+- Keep PostgreSQL private; do not expose a public TCP proxy unless it is temporarily required for administration.

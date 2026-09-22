@@ -15,6 +15,13 @@ jobs:
     env:
       DEBUG: "True"
       SECRET_KEY: "ci-only-secret-key-that-is-long-enough-for-tests"
+      THROTTLE_LOGIN: "1000/min"
+      THROTTLE_REGISTER: "1000/hour"
+      THROTTLE_TOKEN_REFRESH: "1000/hour"
+      THROTTLE_SECURITY: "1000/hour"
+      THROTTLE_PASSWORD_RESET: "1000/hour"
+      THROTTLE_OCR: "1000/hour"
+      THROTTLE_IMPORTS: "1000/hour"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

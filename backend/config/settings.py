@@ -166,16 +166,17 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("JWT_REFRESH_DAYS", "7"))),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
+    "CHECK_REVOKE_TOKEN": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
 # Strict production CORS. The old allow-all environment flag is ignored outside DEBUG.
 CORS_ALLOW_CREDENTIALS = False
 CORS_ALLOW_ALL_ORIGINS = DEBUG
-CORS_ALLOWED_ORIGINS = env_list(
-    "CORS_ALLOWED_ORIGINS",
-    "https://smart-expense-tracker-v3.vercel.app,https://localhost",
-)
+CORS_ALLOWED_ORIGINS = sorted(set(
+    env_list("CORS_ALLOWED_ORIGINS")
+    + ["https://smart-expense-tracker-v3.vercel.app", "https://localhost"]
+))
 CSRF_TRUSTED_ORIGINS = env_list(
     "CSRF_TRUSTED_ORIGINS",
     "https://smart-expense-tracker-v3.vercel.app,https://*.up.railway.app",
