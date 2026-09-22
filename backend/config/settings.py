@@ -67,6 +67,9 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 # Database: PostgreSQL in production, SQLite locally.
 database_url = os.getenv("DATABASE_URL", "").strip()
+if not DEBUG and not database_url:
+    raise RuntimeError("DATABASE_URL is required in production. Refusing to start with ephemeral SQLite.")
+
 if database_url:
     DATABASES = {
         "default": dj_database_url.config(
