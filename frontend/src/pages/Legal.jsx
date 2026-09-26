@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import logoFull from '../assets/logo-full.png';
+import BrandMark from '../components/BrandMark';
 
 const sections = {
   privacy: {
@@ -35,7 +35,7 @@ export default function Legal({type='privacy'}){
   const page=sections[type]||sections.privacy;
   return <main className="legal-page">
     <div className="legal-shell">
-      <Link className="legal-brand" to="/"><img src={logoFull} alt="Smart Expense Tracker"/></Link>
+      <Link className="legal-brand" to="/"><BrandMark compact /></Link>
       <span className="micro-label">{page.eyebrow}</span>
       <h1>{page.title}</h1>
       <p className="legal-intro">{page.intro}</p>

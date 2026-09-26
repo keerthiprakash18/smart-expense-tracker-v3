@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons.svg'],
+      includeAssets: ['app-logo.svg'],
       manifest: {
         name: 'Smart Expense Tracker',
         short_name: 'Smart Expense',
@@ -18,7 +18,7 @@ export default defineConfig({
         start_url: '/',
         scope: '/',
         icons: [
-          { src: 'smart expense tracker.png', sizes: '1254x1254', type: 'image/png', purpose: 'any maskable' },
+          { src: 'app-logo.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
         ],
       },
       workbox: {

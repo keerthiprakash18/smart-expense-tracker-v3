@@ -4,7 +4,7 @@ import { BarChart3, Bell, CircleDollarSign, LayoutDashboard, LogOut, Moon, Plus,
 import { useAuth } from '../context/AuthContext';
 import { useFinance } from '../context/FinanceContext';
 import { useTheme } from '../context/ThemeContext';
-import logoFull from '../assets/logo-full.png';
+import BrandMark from './BrandMark';
 import api, { getRefreshToken } from '../services/api';
 
 const nav = [
@@ -48,7 +48,7 @@ export default function AppShell() {
     <aside className="sidebar">
       <button className="brand" onClick={() => navigate('/')} aria-label="Go to overview">
         <span className="brand-halo" aria-hidden="true"/>
-        <img src={logoFull} alt="Smart Expense Tracker" />
+        <BrandMark />
       </button>
       <div className="side-caption">PERSONAL FINANCE</div>
       <nav className="side-nav">
@@ -70,7 +70,7 @@ export default function AppShell() {
 
     <main className="app-main">
       <header className="topbar">
-        <div className="mobile-brand"><img src={logoFull} alt="Smart Expense Tracker" /></div>
+        <div className="mobile-brand"><BrandMark compact /></div>
         <div className="topbar-context">
           <span className="context-icon"><ActiveIcon size={17}/></span>
           <div><small>SMART EXPENSE</small><strong>{activeNav.label}</strong></div>

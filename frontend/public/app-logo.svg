@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Smart Expense Tracker</title>
+  <desc id="desc">Premium finance mark combining an S ribbon, growth chart, leaf and rupee coin.</desc>
+  <defs>
+    <linearGradient id="cream" x1="130" y1="90" x2="880" y2="950" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fffdf7"/>
+      <stop offset=".5" stop-color="#f4eddf"/>
+      <stop offset="1" stop-color="#dfd2bd"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="140" y1="120" x2="870" y2="930" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff1b0"/>
+      <stop offset=".28" stop-color="#d9a83f"/>
+      <stop offset=".55" stop-color="#8b5b17"/>
+      <stop offset=".78" stop-color="#f3cb63"/>
+      <stop offset="1" stop-color="#9a651e"/>
+    </linearGradient>
+    <linearGradient id="green" x1="290" y1="220" x2="755" y2="820" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1b7449"/>
+      <stop offset=".28" stop-color="#0b4b35"/>
+      <stop offset=".58" stop-color="#073b2b"/>
+      <stop offset="1" stop-color="#031f18"/>
+    </linearGradient>
+    <linearGradient id="greenHi" x1="300" y1="260" x2="760" y2="730" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6acb78"/>
+      <stop offset=".45" stop-color="#1d8a56"/>
+      <stop offset="1" stop-color="#0b5139"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#237b50"/>
+      <stop offset="1" stop-color="#073b2b"/>
+    </linearGradient>
+    <radialGradient id="coin" cx=".35" cy=".28" r=".8">
+      <stop stop-color="#fff4b7"/>
+      <stop offset=".33" stop-color="#efc45c"/>
+      <stop offset=".72" stop-color="#c58a28"/>
+      <stop offset="1" stop-color="#8a5717"/>
+    </radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="22" stdDeviation="20" flood-color="#0b1710" flood-opacity=".24"/>
+    </filter>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="9" stdDeviation="8" flood-color="#06251b" flood-opacity=".25"/>
+    </filter>
+  </defs>
+
+  <rect x="54" y="54" width="916" height="916" rx="220" fill="url(#cream)" stroke="url(#gold)" stroke-width="14"/>
+  <rect x="78" y="78" width="868" height="868" rx="198" fill="none" stroke="#ffffff" stroke-opacity=".38" stroke-width="3"/>
+
+  <g filter="url(#shadow)">
+    <g opacity=".98">
+      <rect x="562" y="448" width="76" height="242" rx="18" fill="url(#bar)"/>
+      <rect x="654" y="382" width="82" height="308" rx="19" fill="url(#bar)"/>
+      <rect x="753" y="306" width="86" height="384" rx="20" fill="url(#bar)"/>
+      <path d="M558 452h76v28h-76zM650 386h82v28h-82zM749 310h86v28h-86z" fill="#3f9f68" opacity=".5"/>
+    </g>
+
+    <path d="M346 292C423 225 608 212 740 254C792 270 821 311 813 353C805 397 762 424 708 432C620 446 519 425 447 454C389 477 376 523 420 559C462 593 539 607 607 631C718 670 783 732 742 806C701 879 559 888 434 846C390 831 349 811 314 784"
+          fill="none" stroke="url(#green)" stroke-width="116" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M347 292C426 230 605 219 733 258C775 271 800 298 803 329"
+          fill="none" stroke="url(#greenHi)" stroke-width="22" stroke-linecap="round" opacity=".78"/>
+    <path d="M315 784C360 829 429 852 499 858C579 865 660 849 706 812"
+          fill="none" stroke="url(#gold)" stroke-width="34" stroke-linecap="round" opacity=".95"/>
+    <path d="M771 238C806 209 851 207 878 226C868 271 842 308 799 329C787 296 778 266 771 238Z" fill="url(#greenHi)" stroke="#0a4b31" stroke-width="7"/>
+    <path d="M793 305C814 278 837 255 864 237" fill="none" stroke="#d9d79d" stroke-width="6" stroke-linecap="round" opacity=".5"/>
+
+    <g filter="url(#soft)">
+      <circle cx="724" cy="682" r="108" fill="url(#coin)" stroke="#fff2b0" stroke-width="10"/>
+      <circle cx="724" cy="682" r="88" fill="none" stroke="#9b641c" stroke-width="6" opacity=".85"/>
+      <g fill="none" stroke="#3b2813" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M674 635H778" stroke-width="19"/>
+        <path d="M674 668H778" stroke-width="16"/>
+        <path d="M681 635C735 635 754 653 746 682C739 707 715 717 679 717" stroke-width="20"/>
+        <path d="M682 717L760 796" stroke-width="22"/>
+      </g>
+      <path d="M683 620C711 606 749 607 777 621" fill="none" stroke="#fff3bd" stroke-width="8" stroke-linecap="round" opacity=".58"/>
+    </g>
+  </g>
+</svg>
