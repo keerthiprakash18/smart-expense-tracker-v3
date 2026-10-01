@@ -1,10 +1,38 @@
 import base64
 import hashlib
 import hmac
+import json
+import re
 import secrets
 import struct
 import time
 from urllib.parse import quote
+
+from django.contrib.auth.hashers import check_password
+
+
+def normalize_merchant(value):
+    """Canonical merchant key shared by OCR learning, signals and scan views."""
+    value = re.sub(r"[^a-z0-9 ]+", " ", str(value or "").lower())
+    return re.sub(r"\s+", " ", value).strip()[:160]
+
+
+def consume_recovery_code(security, code):
+    """Burn one stored recovery-code hash. Single source of truth for 2FA + reset."""
+    candidate = str(code or "").strip().upper()
+    if not candidate:
+        return False
+    try:
+        hashes = json.loads(security.recovery_codes or "[]")
+    except (TypeError, ValueError):
+        hashes = []
+    for index, stored_hash in enumerate(hashes):
+        if check_password(candidate, stored_hash):
+            hashes.pop(index)
+            security.recovery_codes = json.dumps(hashes)
+            security.save(update_fields=["recovery_codes", "updated_at"])
+            return True
+    return False
 
 
 def generate_totp_secret(length=20):

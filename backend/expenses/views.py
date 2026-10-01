@@ -13,13 +13,44 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+
+class ExpensePagination(PageNumberPagination):
+    """Keeps the ledger scalable. ``page_size`` is overridable per request."""
+
+    page_size = 50
+    page_size_query_param = "page_size"
+    max_page_size = 200
+
+    def get_paginated_response(self, data):
+        return Response(
+            {
+                "count": self.page.paginator.count,
+                "page": self.page.number,
+                "page_size": self.get_page_size(self.request),
+                "total_pages": self.page.paginator.num_pages,
+                "has_next": self.page.has_next(),
+                "has_previous": self.page.has_previous(),
+                "results": data,
+            }
+        )
+
+    def get_page_size(self, request):
+        try:
+            return super().get_page_size(request)
+        except (TypeError, ValueError):
+            return self.page_size
+
+
+
 from .models import Account, Bill, DebtPayment, Expense, MerchantRule, MoneyDebt, SavingsGoal, UserProfile
 from .ocr_service import IndiaReceiptExtractor
+from .security_utils import normalize_merchant
 from .serializers import (
     AccountSerializer, BillSerializer, DebtPaymentSerializer, ExpenseSerializer,
     MoneyDebtSerializer, SavingsGoalSerializer,
@@ -325,6 +356,7 @@ class ExpenseListCreateView(generics.ListCreateAPIView):
     serializer_class = ExpenseSerializer
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
+    pagination_class = ExpensePagination
 
     def get_queryset(self):
         qs = Expense.objects.filter(user=self.request.user).select_related("account")
@@ -565,9 +597,14 @@ class DashboardSummaryView(APIView):
         account_balance = Account.objects.filter(user=request.user).aggregate(total=Sum("balance"))["total"] or Decimal("0")
         ocr_count = txs.exclude(receipt_image="").exclude(receipt_image__isnull=True).count()
         profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        # Aggregate in the database instead of iterating rows in Python.
         open_debts = MoneyDebt.objects.filter(user=request.user).exclude(status="PAID")
-        borrowed_remaining = sum((item.remaining_amount for item in open_debts.filter(direction="BORROWED")), Decimal("0"))
-        lent_remaining = sum((item.remaining_amount for item in open_debts.filter(direction="LENT")), Decimal("0"))
+        borrowed_remaining = open_debts.filter(direction="BORROWED").aggregate(
+            total=Sum("amount") - Sum("amount_paid")
+        )["total"] or Decimal("0")
+        lent_remaining = open_debts.filter(direction="LENT").aggregate(
+            total=Sum("amount") - Sum("amount_paid")
+        )["total"] or Decimal("0")
         unpaid_bills = Bill.objects.filter(user=request.user, is_paid=False).aggregate(total=Sum("amount"))["total"] or Decimal("0")
         savings_current = SavingsGoal.objects.filter(user=request.user).aggregate(total=Sum("current_amount"))["total"] or Decimal("0")
         return Response(
@@ -679,7 +716,7 @@ class ReceiptScanView(APIView):
 
         parsed = IndiaReceiptExtractor.parse_document(extracted_text, filename)
         parsed["currency"] = detect_currency_from_text(extracted_text + " " + filename)
-        merchant_key = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]+", " ", str(parsed.get("merchant") or "").lower())).strip()[:160]
+        merchant_key = normalize_merchant(parsed.get("merchant"))
         learned = MerchantRule.objects.filter(user=request.user, merchant_key=merchant_key).first() if merchant_key else None
         if learned:
             parsed["category"] = learned.category

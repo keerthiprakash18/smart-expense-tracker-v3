@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Camera, Upload, RotateCcw, X, ScanLine, CheckCircle2 } from 'lucide-react';
 import api from '../services/api';
 
@@ -25,7 +25,6 @@ export default function ReceiptScannerModal({
   isOpen,
   onClose,
   accounts = [],
-  currency = '₹',
   onConfirmExpense
 }) {
   const videoRef = useRef(null);
@@ -57,18 +56,18 @@ export default function ReceiptScannerModal({
     if (videoRef.current) videoRef.current.srcObject = null;
   }, []);
 
-  const resetScanner = useCallback(() => {
+  const retake = useCallback(() => {
     stopCamera();
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl('');
-    setSelectedFile(null);
-    setResult(EMPTY_RESULT);
-    setMode('choose');
-    setLoading(false);
     setError('');
-    setNotes('Scanned Document');
+    setResult(EMPTY_RESULT);
+    setPreviewUrl((url) => {
+      if (url) URL.revokeObjectURL(url);
+      return '';
+    });
+    setSelectedFile(null);
     setDuplicateMatch(null);
-  }, [previewUrl, stopCamera]);
+    setMode('choose');
+  }, [stopCamera]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -100,7 +99,7 @@ export default function ReceiptScannerModal({
           videoRef.current.play().catch(() => {});
         }
       });
-    } catch (err) {
+    } catch {
       setError('Camera permission was denied or the camera is unavailable. Please allow camera access or use Upload Receipt.');
       setMode('choose');
     }
@@ -120,9 +119,11 @@ export default function ReceiptScannerModal({
     }
 
     stopCamera();
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl((url) => {
+      if (url) URL.revokeObjectURL(url);
+      return isImage ? URL.createObjectURL(file) : '';
+    });
     setSelectedFile(file);
-    setPreviewUrl(isImage ? URL.createObjectURL(file) : '');
     setMode('preview');
     setError('');
   };
@@ -195,16 +196,6 @@ export default function ReceiptScannerModal({
     }
   };
 
-  const retake = () => {
-    setError('');
-    setResult(EMPTY_RESULT);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl('');
-    setSelectedFile(null);
-    setDuplicateMatch(null);
-    setMode('choose');
-  };
-
   const confirmExpense = async () => {
     if (saving) return;
 
@@ -235,7 +226,7 @@ export default function ReceiptScannerModal({
         result.gstin ? `GSTIN: ${result.gstin}` : '',
         result.upi_ref ? `UPI Ref: ${result.upi_ref}` : ''
       ].filter(Boolean);
-      const enrichedNotes = [notes, ...metadata].filter(Boolean).join(' • ');
+      const enrichedNotes = [notes, ...metadata].filter(Boolean).join(' â€¢ ');
       const confidence = Math.round(Number(result.confidence?.overall || 0) * 100);
       const success = await onConfirmExpense?.({
         title: result.merchant || 'Scanned Receipt',
@@ -256,8 +247,10 @@ export default function ReceiptScannerModal({
       }
 
       stopCamera();
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl('');
+      setPreviewUrl((url) => {
+        if (url) URL.revokeObjectURL(url);
+        return '';
+      });
       setSelectedFile(null);
       setResult(EMPTY_RESULT);
       setMode('choose');
@@ -274,29 +267,29 @@ export default function ReceiptScannerModal({
   if (!isOpen) return null;
 
   return (
-    <div style={styles.backdrop}>
-      <div style={styles.modal}>
-        <div style={styles.header}>
+    <div className="modal-backdrop scanner-backdrop">
+      <div className="modal-card scanner-card">
+        <div className="modal-head">
           <div>
-            <div style={styles.kicker}>SMART RECEIPT SCANNER</div>
-            <h2 style={styles.title}>Scan Receipt</h2>
+            <span>SMART RECEIPT SCANNER</span>
+            <h2>Scan Receipt</h2>
           </div>
-          <button type="button" onClick={onClose} style={styles.iconButton} aria-label="Close">
+          <button type="button" onClick={onClose} className="icon-button" aria-label="Close">
             <X size={20} />
           </button>
         </div>
 
-        {error && <div style={styles.error}>{error}</div>}
+        {error && <div className="alert error">{error}</div>}
 
         {mode === 'choose' && (
-          <div style={styles.chooseGrid}>
-            <button type="button" onClick={startCamera} style={styles.optionCard}>
-              <div style={styles.optionIcon}><Camera size={30} /></div>
+          <div className="scanner-choose">
+            <button type="button" onClick={startCamera} className="scanner-option">
+              <div className="scanner-option-icon"><Camera size={30} /></div>
               <strong>Live Camera</strong>
               <span>Open your phone camera and capture the receipt.</span>
             </button>
-            <button type="button" onClick={() => fileInputRef.current?.click()} style={styles.optionCard}>
-              <div style={styles.optionIcon}><Upload size={30} /></div>
+            <button type="button" onClick={() => fileInputRef.current?.click()} className="scanner-option">
+              <div className="scanner-option-icon"><Upload size={30} /></div>
               <strong>Upload Receipt</strong>
               <span>Choose a receipt image from your phone or computer.</span>
             </button>
@@ -312,26 +305,26 @@ export default function ReceiptScannerModal({
 
         {mode === 'camera' && (
           <div>
-            <div style={styles.cameraBox}>
-              <video ref={videoRef} autoPlay playsInline muted style={styles.video} />
-              <div style={styles.cameraFrame} />
+            <div className="scanner-camera">
+              <video ref={videoRef} autoPlay playsInline muted className="scanner-video" />
+              <div className="scanner-frame" />
             </div>
-            <div style={styles.actionRow}>
-              <button type="button" onClick={retake} style={styles.secondary}><X size={17} /> Cancel</button>
-              <button type="button" onClick={capturePhoto} style={styles.primary}><Camera size={18} /> Capture</button>
+            <div className="scanner-actions">
+              <button type="button" onClick={retake} className="button ghost"><X size={17} /> Cancel</button>
+              <button type="button" onClick={capturePhoto} className="button primary"><Camera size={18} /> Capture</button>
             </div>
           </div>
         )}
 
         {mode === 'preview' && (
           <div>
-            <div style={styles.previewBox}>
-              {previewUrl ? <img src={previewUrl} alt="Receipt preview" style={styles.preview} /> : <div style={{padding: 36, textAlign: 'center', color: '#AAB7CA'}}><strong>{selectedFile?.name}</strong><div style={{marginTop: 8, fontSize: 12}}>PDF receipt ready to scan</div></div>}
+            <div className="scanner-preview">
+              {previewUrl ? <img src={previewUrl} alt="Receipt preview" className="scanner-preview-img" /> : <div className="scanner-pdf-placeholder"><strong>{selectedFile?.name}</strong><div>PDF receipt ready to scan</div></div>}
             </div>
-            <div style={styles.actionRow}>
-              <button type="button" onClick={retake} style={styles.secondary}><RotateCcw size={17} /> Retake</button>
-              <button type="button" onClick={() => scanReceipt()} disabled={loading} style={styles.primary}>
-                <ScanLine size={18} /> {loading ? 'Reading receipt…' : 'Scan Again'}
+            <div className="scanner-actions">
+              <button type="button" onClick={retake} className="button ghost"><RotateCcw size={17} /> Retake</button>
+              <button type="button" onClick={() => scanReceipt()} disabled={loading} className="button primary">
+                <ScanLine size={18} /> {loading ? 'Reading receiptâ€¦' : 'Scan Again'}
               </button>
             </div>
           </div>
@@ -339,22 +332,28 @@ export default function ReceiptScannerModal({
 
         {mode === 'result' && (
           <div>
-            <div style={styles.success}><CheckCircle2 size={18} /> Receipt scanned automatically. Verify the fields before saving.</div>
-            {duplicateMatch && <div style={styles.warning}><AlertTriangle size={16} /> Possible duplicate: {duplicateMatch.title || 'existing transaction'} • {duplicateMatch.date || ''} • {duplicateMatch.amount || ''}</div>}
-            <div style={styles.resultMeta}><span style={styles.metaPill}>Confidence <strong>{Math.round(Number(result.confidence?.overall || 0) * 100)}%</strong></span>{result.merchant_memory && <span style={styles.metaPill}>Merchant memory <strong>Matched</strong></span>}{result.tax_amount > 0 && <span style={styles.metaPill}>Tax <strong>{result.tax_amount}</strong></span>}{result.gstin && <span style={styles.metaPill}>GSTIN <strong>{result.gstin}</strong></span>}{result.upi_ref && <span style={styles.metaPill}>UPI Ref <strong>{result.upi_ref}</strong></span>}</div>
-            <div style={styles.resultGrid}>
-              <label style={styles.label}>Amount<input value={result.amount || ''} onChange={(e) => setResult((p) => ({ ...p, amount: e.target.value }))} inputMode="decimal" style={styles.input} /></label>
-              <label style={styles.label}>Transaction Date<input type="date" value={result.date || ''} onChange={(e) => setResult((p) => ({ ...p, date: e.target.value }))} style={styles.input} /></label>
-              <label style={styles.label}>Merchant<input value={result.merchant || ''} onChange={(e) => setResult((p) => ({ ...p, merchant: e.target.value }))} style={styles.input} /></label>
-              <label style={styles.label}>Category<input value={result.category || 'General'} onChange={(e) => setResult((p) => ({ ...p, category: e.target.value }))} style={styles.input} /></label>
-              <label style={styles.label}>Account<select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={styles.input}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name || a.title || 'Account'}</option>)}</select></label>
-              <label style={styles.label}>Payment Method<select value={result.payment_method || 'Cash'} onChange={(e) => setResult((p) => ({ ...p, payment_method: e.target.value }))} style={styles.input}><option>Cash</option><option>UPI</option><option>Card</option><option>NetBanking</option></select></label>
-              <label style={{ ...styles.label, gridColumn: '1 / -1' }}>Notes<input value={notes} onChange={(e) => setNotes(e.target.value)} style={styles.input} /></label>
+            <div className="alert success"><CheckCircle2 size={18} /> Receipt scanned automatically. Verify the fields before saving.</div>
+            {duplicateMatch && <div className="alert warning"><AlertTriangle size={16} /> Possible duplicate: {duplicateMatch.title || 'existing transaction'} â€¢ {duplicateMatch.date || ''} â€¢ {duplicateMatch.amount || ''}</div>}
+            <div className="scanner-meta">
+              <span className="meta-pill">Confidence <strong>{Math.round(Number(result.confidence?.overall || 0) * 100)}%</strong></span>
+              {result.merchant_memory && <span className="meta-pill">Merchant memory <strong>Matched</strong></span>}
+              {result.tax_amount > 0 && <span className="meta-pill">Tax <strong>{result.tax_amount}</strong></span>}
+              {result.gstin && <span className="meta-pill">GSTIN <strong>{result.gstin}</strong></span>}
+              {result.upi_ref && <span className="meta-pill">UPI Ref <strong>{result.upi_ref}</strong></span>}
             </div>
-            {!result.date && <div style={styles.warning}>No reliable date was found in the receipt. Please enter the receipt date manually rather than using today's date.</div>}
-            <div style={styles.actionRow}>
-              <button type="button" onClick={retake} style={styles.secondary}><RotateCcw size={17} /> Retake</button>
-              <button type="button" onClick={confirmExpense} disabled={saving} style={{ ...styles.primary, opacity: saving ? 0.65 : 1, cursor: saving ? 'not-allowed' : 'pointer' }}><CheckCircle2 size={18} /> {saving ? 'Creating Expense…' : 'Confirm & Create Expense'}</button>
+            <div className="scanner-grid">
+              <label><span>Amount</span><input value={result.amount || ''} onChange={(e) => setResult((p) => ({ ...p, amount: e.target.value }))} inputMode="decimal" /></label>
+              <label><span>Transaction Date</span><input type="date" value={result.date || ''} onChange={(e) => setResult((p) => ({ ...p, date: e.target.value }))} /></label>
+              <label><span>Merchant</span><input value={result.merchant || ''} onChange={(e) => setResult((p) => ({ ...p, merchant: e.target.value }))} /></label>
+              <label><span>Category</span><input value={result.category || 'General'} onChange={(e) => setResult((p) => ({ ...p, category: e.target.value }))} /></label>
+              <label><span>Account</span><select value={accountId} onChange={(e) => setAccountId(e.target.value)}>{accounts.map((a) => <option key={a.id} value={a.id}>{a.name || a.title || 'Account'}</option>)}</select></label>
+              <label><span>Payment Method</span><select value={result.payment_method || 'Cash'} onChange={(e) => setResult((p) => ({ ...p, payment_method: e.target.value }))}><option>Cash</option><option>UPI</option><option>Card</option><option>NetBanking</option></select></label>
+              <label className="scanner-full"><span>Notes</span><input value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
+            </div>
+            {!result.date && <div className="alert warning">No reliable date was found in the receipt. Please enter the receipt date manually rather than using today's date.</div>}
+            <div className="scanner-actions">
+              <button type="button" onClick={retake} className="button ghost"><RotateCcw size={17} /> Retake</button>
+              <button type="button" onClick={confirmExpense} disabled={saving} className="button primary"><CheckCircle2 size={18} /> {saving ? 'Creating Expenseâ€¦' : 'Confirm & Create Expense'}</button>
             </div>
           </div>
         )}
@@ -362,31 +361,3 @@ export default function ReceiptScannerModal({
     </div>
   );
 }
-
-const styles = {
-  backdrop: { position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
-  modal: { width: 'min(760px, 100%)', maxHeight: '92vh', overflowY: 'auto', background: '#101116', color: '#fff', border: '1px solid rgba(255,255,255,.10)', borderRadius: 24, padding: 22, boxShadow: '0 30px 100px rgba(0,0,0,.55)' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 },
-  kicker: { fontSize: 11, fontWeight: 900, letterSpacing: 1.4, opacity: .55 },
-  title: { margin: '5px 0 0', fontSize: 25 },
-  iconButton: { width: 40, height: 40, borderRadius: 12, border: '1px solid rgba(255,255,255,.10)', background: 'rgba(255,255,255,.05)', color: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer' },
-  chooseGrid: { display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 14 },
-  optionCard: { minHeight: 180, borderRadius: 20, border: '1px solid rgba(255,255,255,.10)', background: 'rgba(255,255,255,.04)', color: '#fff', padding: 22, textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10 },
-  optionIcon: { width: 58, height: 58, borderRadius: 17, background: 'rgba(10,132,255,.16)', color: '#4aa3ff', display: 'grid', placeItems: 'center' },
-  cameraBox: { position: 'relative', width: '100%', aspectRatio: '4/3', background: '#000', borderRadius: 18, overflow: 'hidden' },
-  video: { width: '100%', height: '100%', objectFit: 'cover' },
-  cameraFrame: { position: 'absolute', inset: '12%', border: '2px solid rgba(255,255,255,.8)', borderRadius: 12, pointerEvents: 'none' },
-  previewBox: { width: '100%', maxHeight: '58vh', background: '#000', borderRadius: 18, overflow: 'hidden', display: 'grid', placeItems: 'center' },
-  preview: { width: '100%', maxHeight: '58vh', objectFit: 'contain', display: 'block' },
-  actionRow: { display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 16 },
-  primary: { flex: 1, minHeight: 48, border: 0, borderRadius: 14, background: '#1683ff', color: '#fff', fontWeight: 900, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  secondary: { minHeight: 48, padding: '0 18px', border: '1px solid rgba(255,255,255,.12)', borderRadius: 14, background: 'rgba(255,255,255,.05)', color: '#fff', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  error: { padding: 12, borderRadius: 12, background: 'rgba(255,69,58,.12)', border: '1px solid rgba(255,69,58,.25)', color: '#ffb4ae', marginBottom: 14, fontSize: 13 },
-  success: { padding: 12, borderRadius: 12, background: 'rgba(48,209,88,.10)', border: '1px solid rgba(48,209,88,.22)', color: '#8ff0aa', marginBottom: 14, display: 'flex', gap: 8, alignItems: 'center', fontSize: 13 },
-  warning: { marginTop: 12, padding: 12, borderRadius: 12, background: 'rgba(255,159,10,.10)', border: '1px solid rgba(255,159,10,.20)', color: '#ffc86a', fontSize: 12, display:'flex',gap:8,alignItems:'center' },
-  resultMeta: { display:'flex',flexWrap:'wrap',gap:8,marginBottom:12 },
-  metaPill: { padding:'8px 10px',borderRadius:999,background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.08)',color:'#AAB7CA',fontSize:11,display:'inline-flex',gap:5,alignItems:'center' },
-  resultGrid: { display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 12 },
-  label: { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11, fontWeight: 800, opacity: .9 },
-  input: { width: '100%', boxSizing: 'border-box', minHeight: 44, borderRadius: 12, border: '1px solid rgba(255,255,255,.10)', background: '#181a21', color: '#fff', padding: '0 12px', outline: 'none' }
-};

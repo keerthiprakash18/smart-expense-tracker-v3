@@ -12,7 +12,8 @@ export default function Overview() {
   const navigate = useNavigate();
   const { profile, accounts, transactions, summary, loading, error } = useFinance();
   const [insights,setInsights]=useState([]);
-  useEffect(()=>{let live=true;api.get('/api/v3/insights/').then(r=>{if(live)setInsights(r.data?.insights||[])}).catch(()=>{});return()=>{live=false}},[transactions.length]);
+  const profileCurrency = profile?.currency;
+  useEffect(()=>{let live=true;api.get('/api/v3/insights/').then(r=>{if(live)setInsights(r.data?.insights||[])}).catch(()=>{});return()=>{live=false}},[loading, profileCurrency]);
   const symbol = profile?.currency || '₹';
   const now = new Date();
   const monthTx = useMemo(() => transactions.filter((tx) => {

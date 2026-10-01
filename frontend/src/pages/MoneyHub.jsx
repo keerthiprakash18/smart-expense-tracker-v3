@@ -12,6 +12,7 @@ export default function MoneyHub() {
   const [tab,setTab]=useState('debts');
   const [debts,setDebts]=useState([]); const [bills,setBills]=useState([]); const [goals,setGoals]=useState([]);
   const [loading,setLoading]=useState(true); const [modal,setModal]=useState(null); const [saving,setSaving]=useState(false);
+  const [promptState,setPromptState]=useState(null);
 
   const load=useCallback(async()=>{setLoading(true);try{const [d,b,g]=await Promise.all([api.get('/api/money-debts/'),api.get('/api/bills/'),api.get('/api/savings-goals/')]);setDebts(d.data||[]);setBills(b.data||[]);setGoals(g.data||[]);}catch(err){notify(err.response?.data?.error||'Unable to load Money Hub','error');}finally{setLoading(false)}},[notify]);
   useEffect(()=>{load()},[load]);
@@ -26,10 +27,11 @@ export default function MoneyHub() {
   const saveDebt=async(data)=>{setSaving(true);try{const payload={...data}; if(!payload.due_date) delete payload.due_date; await api.post('/api/money-debts/',payload);notify('Money record added');setModal(null);await load();await refreshBase();}catch(err){notify(err.response?.data?.error||'Unable to add money record','error')}finally{setSaving(false)}};
   const saveBill=async(data)=>{setSaving(true);try{await api.post('/api/bills/',data);notify('Bill added');setModal(null);await load();await refreshBase();}catch(err){notify(err.response?.data?.error||'Unable to add bill','error')}finally{setSaving(false)}};
   const saveGoal=async(data)=>{setSaving(true);try{const payload={...data}; if(!payload.target_date) delete payload.target_date; await api.post('/api/savings-goals/',payload);notify('Savings goal added');setModal(null);await load();await refreshBase();}catch(err){notify(err.response?.data?.error||'Unable to add goal','error')}finally{setSaving(false)}};
-  const payDebt=async(debt)=>{const raw=window.prompt(`Payment amount (remaining ${money(debt.remaining_amount,symbol)})`);if(!raw)return;try{await api.post(`/api/money-debts/${debt.id}/payments/`,{amount:raw,payment_date:today()});notify('Repayment recorded');await load();await refreshBase();}catch(err){notify(err.response?.data?.error||'Unable to record payment','error')}};
-  const toggleBill=async(bill)=>{try{await api.patch(`/api/bills/${bill.id}/`,{is_paid:!bill.is_paid});notify(bill.is_paid?'Bill marked unpaid':'Bill marked paid');await load();await refreshBase();}catch{notify('Unable to update bill','error')}};
-  const updateGoal=async(goal)=>{const raw=window.prompt(`Current saved amount for ${goal.name}`,goal.current_amount);if(raw===null)return;try{await api.patch(`/api/savings-goals/${goal.id}/`,{current_amount:raw});notify('Goal updated');await load();await refreshBase();}catch(err){notify(err.response?.data?.current_amount?.[0]||'Unable to update goal','error')}};
+  const payDebt=(debt)=>setPromptState({kind:'debt',debt});
+  const updateGoal=(goal)=>setPromptState({kind:'goal',goal});
+  const submitPrompt=async(value)=>{const ps=promptState;if(!ps)return'';try{if(ps.kind==='debt'){await api.post(`/api/money-debts/${ps.debt.id}/payments/`,{amount:value,payment_date:today()});notify('Repayment recorded');}else{await api.patch(`/api/savings-goals/${ps.goal.id}/`,{current_amount:value});notify('Goal updated');}await load();await refreshBase();setPromptState(null);return '';}catch(err){return (err.response?.data?.amount?.[0])||(err.response?.data?.current_amount?.[0])||(err.response?.data?.error)||'Unable to update record';}};
   const remove=async(kind,id)=>{if(!window.confirm('Delete this record?'))return;const path=kind==='debt'?'money-debts':kind==='bill'?'bills':'savings-goals';try{await api.delete(`/api/${path}/${id}/`);notify('Record deleted');await load();await refreshBase();}catch{notify('Unable to delete record','error')}};
+  const toggleBill=async(bill)=>{try{await api.patch(`/api/bills/${bill.id}/`,{is_paid:!bill.is_paid});notify(bill.is_paid?'Bill marked unpaid':'Bill marked paid');await load();await refreshBase();}catch{notify('Unable to update bill','error')}};
 
   return <div className="page-stack">
     <PageHeader eyebrow="MONEY HUB" title="Commitments & goals" description="Track borrowed/lent money, upcoming bills and savings goals without mixing them into your daily ledger." actions={<button className="button primary" onClick={()=>setModal(tab==='debts'?'debt':tab==='bills'?'bill':'goal')}><Plus size={18}/> Add {tab==='debts'?'record':tab==='bills'?'bill':'goal'}</button>} />
@@ -39,8 +41,35 @@ export default function MoneyHub() {
     <Surface>
       {loading ? <div className="loading-state">Loading Money Hub…</div> : tab==='debts' ? (debts.length ? <div className="money-list">{debts.map((x)=><div className="money-row" key={x.id}><div className={`money-badge ${x.direction==='LENT'?'lent':'borrowed'}`}><HandCoins size={19}/></div><div className="money-main"><strong>{x.person_name}</strong><span>{x.direction==='LENT'?'Owes you':'You owe'} • {x.purpose||'No purpose'} • {x.due_date?`Due ${x.due_date}`:'No due date'}</span><Progress value={(Number(x.amount_paid||0)/Number(x.amount||1))*100}/></div><div className="money-amount"><strong>{money(x.remaining_amount,symbol)}</strong><span>{x.status}</span></div>{x.status!=='PAID'&&<button className="mini-button" onClick={()=>payDebt(x)}>Record payment</button>}<button className="icon-button danger" onClick={()=>remove('debt',x.id)}><Trash2 size={16}/></button></div>)}</div> : <EmptyState title="No borrow/lend records" description="Add money you borrowed or lent and track repayments here."/>) : tab==='bills' ? (bills.length ? <div className="money-list">{bills.map((x)=><div className="money-row" key={x.id}><button className={`bill-check ${x.is_paid?'paid':''}`} onClick={()=>toggleBill(x)}><CheckCircle2 size={21}/></button><div className="money-main"><strong>{x.title}</strong><span>{x.category} • Due {x.due_date} {x.is_recurring?'• Recurring':''}</span></div><div className="money-amount"><strong>{money(x.amount,symbol)}</strong><span>{x.is_paid?'PAID':'PENDING'}</span></div><button className="icon-button danger" onClick={()=>remove('bill',x.id)}><Trash2 size={16}/></button></div>)}</div> : <EmptyState title="No bills tracked" description="Add upcoming bills and mark them paid when completed."/>) : (goals.length ? <div className="goal-grid">{goals.map((x)=><div className="goal-card" key={x.id}><div className="goal-top"><div className="goal-icon">{x.icon||'🎯'}</div><button className="icon-button danger" onClick={()=>remove('goal',x.id)}><Trash2 size={15}/></button></div><strong>{x.name}</strong><span>{money(x.current_amount,symbol)} of {money(x.target_amount,symbol)}</span><Progress value={x.progress_percent}/><div className="goal-footer"><small>{x.progress_percent}% complete {x.target_date?`• ${x.target_date}`:''}</small><button className="text-button" onClick={()=>updateGoal(x)}>Update saved</button></div></div>)}</div> : <EmptyState title="No savings goals" description="Create a target and update your saved amount as you progress."/>)}
     </Surface>
-    {modal && <MoneyModal kind={modal} saving={saving} onClose={()=>setModal(null)} onDebt={saveDebt} onBill={saveBill} onGoal={saveGoal}/>} 
+    {modal && <MoneyModal kind={modal} saving={saving} onClose={()=>setModal(null)} onDebt={saveDebt} onBill={saveBill} onGoal={saveGoal}/>}
+    {promptState && <AmountPrompt prompt={promptState} symbol={symbol} onSubmit={submitPrompt} onClose={()=>setPromptState(null)}/>}
   </div>;
+}
+
+function AmountPrompt({prompt,symbol,onSubmit,onClose}) {
+  const isDebt=prompt.kind==='debt';
+  const max=isDebt?Number(prompt.debt.remaining_amount||0):null;
+  const defaultValue=isDebt?'':String(prompt.goal.current_amount||0);
+  const [value,setValue]=useState(defaultValue);
+  const [error,setError]=useState('');
+  const [busy,setBusy]=useState(false);
+  const label=isDebt?'Payment amount':`Current saved amount for ${prompt.goal.name}`;
+  const submit=async(e)=>{
+    e.preventDefault();
+    const numeric=Number(value);
+    if(!Number.isFinite(numeric)||numeric<=0){setError('Enter an amount greater than zero.');return}
+    if(isDebt&&max>0&&numeric>max){setError(`Payment cannot exceed the remaining ${money(max,symbol)}.`);return}
+    setBusy(true);
+    const message=await onSubmit(value);
+    setBusy(false);
+    if(message)setError(message);
+  };
+  return <div className="modal-backdrop" onMouseDown={onClose}><form className="modal-card" onSubmit={submit} onMouseDown={(e)=>e.stopPropagation()}>
+    <div className="modal-head"><div><span>{isDebt?'RECORD PAYMENT':'UPDATE GOAL'}</span><h2>{isDebt?`Pay ${prompt.debt.person_name}`:prompt.goal.name}</h2></div><button type="button" className="icon-button" onClick={onClose}><X size={19}/></button></div>
+    <label><span>{label}{isDebt?` (remaining ${money(max,symbol)})`:''}</span><input autoFocus required type="number" min="0.01" step="0.01" value={value} onChange={(e)=>setValue(e.target.value)}/></label>
+    {error&&<div className="alert error">{error}</div>}
+    <button className="button primary full" disabled={busy}>{busy?'Saving…':isDebt?'Record payment':'Update goal'}</button>
+  </form></div>;
 }
 
 function MoneyModal({kind,saving,onClose,onDebt,onBill,onGoal}) {

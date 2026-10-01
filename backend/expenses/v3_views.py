@@ -42,7 +42,15 @@ from .models import (
     SecuritySettings,
     UserProfile,
 )
-from .security_utils import generate_recovery_codes, generate_totp_secret, provisioning_uri, verify_totp
+from .media_views import MediaStatusView, receipt_is_reachable
+from .security_utils import (
+    consume_recovery_code,
+    generate_recovery_codes,
+    generate_totp_secret,
+    normalize_merchant,
+    provisioning_uri,
+    verify_totp,
+)
 from .serializers import ExpenseSerializer
 from .v3_serializers import (
     AccountTransferSerializer,
@@ -56,11 +64,6 @@ from .v3_serializers import (
     SecuritySettingsSerializer,
 )
 from .views import balance_delta, ensure_default_accounts, safe_decimal
-
-
-def normalize_merchant(value):
-    value = re.sub(r"[^a-z0-9 ]+", " ", str(value or "").lower())
-    return re.sub(r"\s+", " ", value).strip()[:160]
 
 
 def advance_date(value, frequency, interval=1):
@@ -270,6 +273,11 @@ class RecurringProcessView(APIView):
         return Response({"created_count": len(created), "transaction_ids": created})
 
 
+def process_due_recurring_batch(user, today=None, max_runs=100):
+    """Public wrapper used by the lightweight background scheduler."""
+    return process_due_recurring(user, today=today, max_runs=max_runs)
+
+
 class AccountTransferListCreateView(UserScopedListCreate):
     serializer_class = AccountTransferSerializer
 
@@ -394,7 +402,15 @@ class ReceiptVaultView(APIView):
 
     def get(self, request):
         qs = Expense.objects.filter(user=request.user).exclude(receipt_image="").exclude(receipt_image__isnull=True).select_related("account")
-        return Response(ExpenseSerializer(qs[:250], many=True, context={"request": request}).data)
+        rows = list(qs[:250])
+        data = ExpenseSerializer(rows, many=True, context={"request": request}).data
+        # Surface durability so the client can warn before receipts are lost on
+        # an ephemeral container that has no S3/R2 bucket attached.
+        return Response({
+            "results": data,
+            "storage_durable": bool(getattr(settings, "MEDIA_STORAGE_DURABLE", False)),
+            "media_url": settings.MEDIA_URL,
+        })
 
 
 class CalendarView(APIView):
@@ -602,23 +618,6 @@ def get_security(user):
     return obj
 
 
-def consume_security_recovery_code(security, code):
-    candidate = str(code or "").strip().upper()
-    if not candidate:
-        return False
-    try:
-        hashes = json.loads(security.recovery_codes or "[]")
-    except (TypeError, ValueError):
-        hashes = []
-    for index, stored_hash in enumerate(hashes):
-        if check_password(candidate, stored_hash):
-            hashes.pop(index)
-            security.recovery_codes = json.dumps(hashes)
-            security.save(update_fields=["recovery_codes", "updated_at"])
-            return True
-    return False
-
-
 def email_delivery_configured():
     if not getattr(settings, "EMAIL_SECURITY_ENABLED", False):
         return False
@@ -781,7 +780,7 @@ class RecoveryPasswordResetView(APIView):
         except DjangoValidationError as exc:
             return Response({"error": " ".join(exc.messages)}, status=400)
 
-        if not consume_security_recovery_code(sec, recovery_code):
+        if not consume_recovery_code(sec, recovery_code):
             return Response({"error": "Invalid account or recovery code."}, status=400)
 
         with transaction.atomic():
@@ -849,7 +848,7 @@ class TwoFactorDisableView(APIView):
         if not request.user.check_password(request.data.get("password", "")):
             return Response({"error": "Password is incorrect."}, status=400)
         code = request.data.get("code")
-        if sec.two_factor_enabled and not verify_totp(sec.totp_secret, code) and not consume_security_recovery_code(sec, code):
+        if sec.two_factor_enabled and not verify_totp(sec.totp_secret, code) and not consume_recovery_code(sec, code):
             return Response({"error": "Invalid authenticator or recovery code."}, status=400)
         sec.two_factor_enabled = False
         sec.totp_secret = ""

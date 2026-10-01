@@ -301,6 +301,16 @@ class SmartExpenseApiTests(APITestCase):
         self.assertEqual(security.status_code, 200)
         self.assertFalse(security.data["two_factor_enabled"])
 
+    def test_receipt_vault_returns_envelope_and_storage_status(self):
+        self.register_and_login("vault", "vault@example.com")
+        vault = self.client.get(reverse("v3-receipt-vault"))
+        self.assertEqual(vault.status_code, 200)
+        self.assertEqual(vault.data["results"], [])
+        self.assertIn("storage_durable", vault.data)
+        status = self.client.get(reverse("v3-receipt-status"))
+        self.assertEqual(status.status_code, 200)
+        self.assertIn("s3_configured", status.data)
+
 
     def test_two_factor_login_flow(self):
         self.register_and_login("twofactor", "twofactor@example.com")

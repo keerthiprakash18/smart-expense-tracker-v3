@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  const loginUser = (accessToken, refreshToken = null) => {
+  const loginUser = (accessToken, _refreshToken = null) => {
     if (!accessToken) return;
 
     setToken(accessToken);

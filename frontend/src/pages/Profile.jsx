@@ -27,7 +27,7 @@ export default function Profile() {
 
     <Surface><div className="section-heading"><div><span>ACCOUNTS</span><h2>Your money sources</h2></div><button className="button ghost" onClick={()=>setAccountOpen(!accountOpen)}><Plus size={17}/> Add account</button></div>{accountOpen&&<AccountForm onSave={async(data)=>{try{await createAccount(data);setAccountOpen(false)}catch(err){notify(err.response?.data?.name?.[0]||'Unable to add account','error')}}}/>}<div className="account-grid">{accounts.map((a)=>{const Icon=accountIcons[a.account_type]||Wallet;return <div className="account-card" key={a.id}><div className="account-icon"><Icon size={20}/></div><div><strong>{a.name}</strong><span>{a.account_type}</span></div><b>{money(a.balance,profile?.currency||'₹')}</b></div>})}</div></Surface>
 
-    <Surface><div className="section-heading"><div><span>SECURITY</span><h2>Password & access</h2></div><button className="button ghost" onClick={()=>setPasswordOpen(!passwordOpen)}><KeyRound size={17}/> Change password</button></div>{passwordOpen&&<PasswordForm onDone={()=>setPasswordOpen(false)} notify={notify}/>}<div className="settings-note"><ShieldCheck size={20}/><div><strong>Private by design</strong><span>Each API endpoint is authenticated and scoped to your user account.</span></div></div></Surface>
+    <Surface><div className="section-heading"><div><span>SECURITY</span><h2>Password & access</h2></div><button className="button ghost" onClick={()=>setPasswordOpen(!passwordOpen)}><KeyRound size={17}/> Change password</button></div>{passwordOpen&&<PasswordForm notify={notify}/>}<div className="settings-note"><ShieldCheck size={20}/><div><strong>Private by design</strong><span>Each API endpoint is authenticated and scoped to your user account.</span></div></div></Surface>
     <SecurityCenter profile={profile} notify={notify}/>
     <DangerZone notify={notify}/>
   </div>;
@@ -35,7 +35,7 @@ export default function Profile() {
 
 function AccountForm({onSave}) { const [name,setName]=useState('');const [type,setType]=useState('BANK');const [balance,setBalance]=useState('0');return <form className="inline-form" onSubmit={e=>{e.preventDefault();onSave({name,account_type:type,balance})}}><input required value={name} onChange={e=>setName(e.target.value)} placeholder="Account name"/><select value={type} onChange={e=>setType(e.target.value)}>{['BANK','UPI','CASH','CARD','WALLET','CUSTOM'].map(x=><option key={x}>{x}</option>)}</select><input type="number" step="0.01" value={balance} onChange={e=>setBalance(e.target.value)} placeholder="Opening balance"/><button className="button primary">Add account</button></form> }
 
-function PasswordForm({onDone,notify}) { const [oldPassword,setOld]=useState('');const [newPassword,setNew]=useState('');const [saving,setSaving]=useState(false);const submit=async(e)=>{e.preventDefault();setSaving(true);try{await api.post('/api/change-password/',{old_password:oldPassword,new_password:newPassword});notify('Password updated. Sign in again.');clearTokens();window.location.hash='#/login';window.location.reload()}catch(err){notify(err.response?.data?.error||'Unable to update password','error')}finally{setSaving(false)}};return <form className="inline-form password" onSubmit={submit}><input required type="password" value={oldPassword} onChange={e=>setOld(e.target.value)} placeholder="Current password"/><input required type="password" minLength="8" value={newPassword} onChange={e=>setNew(e.target.value)} placeholder="New strong password"/><button className="button primary" disabled={saving}>{saving?'Updating…':'Update password'}</button></form> }
+function PasswordForm({notify}) { const [oldPassword,setOld]=useState('');const [newPassword,setNew]=useState('');const [saving,setSaving]=useState(false);const submit=async(e)=>{e.preventDefault();setSaving(true);try{await api.post('/api/change-password/',{old_password:oldPassword,new_password:newPassword});notify('Password updated. Sign in again.');clearTokens();window.location.hash='#/login';window.location.reload()}catch(err){notify(err.response?.data?.error||'Unable to update password','error')}finally{setSaving(false)}};return <form className="inline-form password" onSubmit={submit}><input required type="password" value={oldPassword} onChange={e=>setOld(e.target.value)} placeholder="Current password"/><input required type="password" minLength="8" value={newPassword} onChange={e=>setNew(e.target.value)} placeholder="New strong password"/><button className="button primary" disabled={saving}>{saving?'Updating…':'Update password'}</button></form> }
 
 
 function SecurityCenter({notify}) {
@@ -45,6 +45,7 @@ function SecurityCenter({notify}) {
   const [code,setCode]=useState('');
   const [showManualKey,setShowManualKey]=useState(false);
   const [recoveryCodes,setRecoveryCodes]=useState([]);
+  const [disableForm,setDisableForm]=useState({password:'',code:''});
 
   const load=async()=>{
     try{
@@ -86,18 +87,19 @@ function SecurityCenter({notify}) {
     }finally{setLoading(false)}
   };
 
-  const disable2fa=async()=>{
-    const password=window.prompt('Enter your current password');
-    if(!password)return;
-    const codeOrRecovery=window.prompt('Enter your authenticator code or a recovery code');
-    if(!codeOrRecovery)return;
+  const disable2fa=async(e)=>{
+    e.preventDefault();
+    const {password,code:codeValue}=disableForm;
+    if(!password||!codeValue){notify('Enter your password and an authenticator or recovery code','error');return}
+    setLoading(true);
     try{
-      await api.post('/api/v3/security/2fa/disable/',{password,code:codeOrRecovery});
+      await api.post('/api/v3/security/2fa/disable/',{password,code:codeValue});
       notify('Two-factor authentication disabled');
+      setDisableForm({password:'',code:''});
       await load();
     }catch(err){
       notify(err.response?.data?.error||'Unable to disable 2FA','error');
-    }
+    }finally{setLoading(false)}
   };
 
   const copyText=async(value,message)=>{
@@ -218,6 +220,18 @@ function SecurityCenter({notify}) {
           <button type="button" className="button ghost full" onClick={()=>copyText(recoveryCodes.join('\n'),'Recovery codes copied')}>Copy all recovery codes</button>
           <button type="button" className="button primary full" onClick={()=>setRecoveryCodes([])}>I saved them</button>
         </div>
+      </div>
+    }
+
+    {status.two_factor_enabled&&
+      <div className="modal-backdrop" onMouseDown={()=>setDisableForm((prev)=>prev.password||prev.code?prev:{password:'',code:''})}>
+        <form className="modal-card" onMouseDown={(e)=>e.stopPropagation()} onSubmit={disable2fa}>
+          <div className="modal-head"><div><span>DISABLE 2FA</span><h2>Turn off two-factor authentication</h2></div><button type="button" className="icon-button" onClick={()=>setDisableForm({password:'',code:''})}>×</button></div>
+          <div className="settings-note"><ShieldCheck size={20}/><div><strong>Confirm your identity</strong><span>Enter your password plus a current authenticator code or a recovery code.</span></div></div>
+          <label><span>Current password</span><input required type="password" value={disableForm.password} onChange={(e)=>setDisableForm((p)=>({...p,password:e.target.value}))} autoComplete="current-password"/></label>
+          <label><span>Authenticator or recovery code</span><input required inputMode="text" value={disableForm.code} onChange={(e)=>setDisableForm((p)=>({...p,code:e.target.value}))} placeholder="123456 or ABCDE-FGHIJ" autoComplete="one-time-code"/></label>
+          <button className="button primary full" disabled={loading}>{loading?'Disabling…':'Disable 2FA'}</button>
+        </form>
       </div>
     }
   </>;

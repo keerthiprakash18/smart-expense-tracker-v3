@@ -6,9 +6,10 @@ import { EmptyState, PageHeader, Surface, TransactionIcon, money } from '../comp
 
 export default function Transactions() {
   const navigate = useNavigate();
-  const { transactions, profile, deleteTransaction, notify } = useFinance();
+  const { transactions, transactionPaging, loadMoreTransactions, profile, deleteTransaction, notify } = useFinance();
   const [query, setQuery] = useState('');
   const [type, setType] = useState('ALL');
+  const [loadingMore, setLoadingMore] = useState(false);
   const symbol = profile?.currency || '₹';
 
   const filtered = useMemo(() => transactions.filter((tx) => {
@@ -16,6 +17,14 @@ export default function Transactions() {
     const hay = `${tx.title} ${tx.category} ${tx.account_name} ${tx.payment_method}`.toLowerCase();
     return matchesType && hay.includes(query.trim().toLowerCase());
   }), [transactions, query, type]);
+
+  const showLoadMore = Boolean(transactionPaging?.hasNext) && !query && type === 'ALL';
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try { await loadMoreTransactions(); } catch { notify('Unable to load more transactions','error'); }
+    finally { setLoadingMore(false); }
+  };
 
   const exportCsv = () => {
     const rows = [['Date','Title','Type','Category','Account','Amount'], ...filtered.map((x)=>[x.date,x.title,x.transaction_type,x.category,x.account_name || '',x.amount])];
@@ -34,8 +43,9 @@ export default function Transactions() {
     <PageHeader eyebrow="LEDGER" title="Transactions" description="Search, filter and manage every entry in your finance history." actions={<><button className="button ghost" onClick={exportCsv}><Download size={17}/> Export</button><button className="button primary" onClick={()=>navigate('/add')}><Plus size={18}/> Add</button></>} />
     <Surface className="toolbar-surface"><div className="search-box"><Search size={18}/><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search merchant, category or account…"/></div><div className="filter-tabs"><Filter size={16}/>{['ALL','EXPENSE','INCOME','BILL'].map((item)=><button key={item} className={type===item?'active':''} onClick={()=>setType(item)}>{item === 'ALL' ? 'All' : item[0]+item.slice(1).toLowerCase()}</button>)}</div></Surface>
     <Surface>
-      <div className="list-summary"><strong>{filtered.length} transaction{filtered.length===1?'':'s'}</strong><span>Newest first</span></div>
-      {filtered.length ? <div className="transaction-list detailed">{filtered.map((tx)=><div key={tx.id} className="transaction-row static"><button className="row-open" onClick={()=>navigate(`/transactions/${tx.id}/edit`)}><TransactionIcon type={tx.transaction_type}/><div className="transaction-main"><strong>{tx.title}</strong><span>{tx.category} • {tx.account_name || 'Account'} • {tx.date}</span></div><div className={`amount ${tx.transaction_type==='INCOME'?'positive':'negative'}`}>{tx.transaction_type==='INCOME'?'+':'-'}{money(tx.amount,symbol)}</div></button><button className="row-delete" onClick={()=>remove(tx.id)} title="Delete"><Trash2 size={17}/></button></div>)}</div> : <EmptyState title="No matching transactions" description="Try a different search or filter, or add a new transaction." action={<button className="button primary" onClick={()=>navigate('/add')}>Add transaction</button>}/>} 
+      <div className="list-summary"><strong>{filtered.length} transaction{filtered.length===1?'':'s'}</strong><span>{transactionPaging?`Showing ${transactions.length} of ${transactionPaging.count}`:'Newest first'}</span></div>
+      {filtered.length ? <div className="transaction-list detailed">{filtered.map((tx)=><div key={tx.id} className="transaction-row static"><button className="row-open" onClick={()=>navigate(`/transactions/${tx.id}/edit`)}><TransactionIcon type={tx.transaction_type}/><div className="transaction-main"><strong>{tx.title}</strong><span>{tx.category} • {tx.account_name || 'Account'} • {tx.date}</span></div><div className={`amount ${tx.transaction_type==='INCOME'?'positive':'negative'}`}>{tx.transaction_type==='INCOME'?'+':'-'}{money(tx.amount,symbol)}</div></button><button className="row-delete" onClick={()=>remove(tx.id)} title="Delete"><Trash2 size={17}/></button></div>)}</div> : <EmptyState title="No matching transactions" description="Try a different search or filter, or add a new transaction." action={<button className="button primary" onClick={()=>navigate('/add')}>Add transaction</button>}/>}
+      {showLoadMore&&<button className="button ghost load-more" onClick={loadMore} disabled={loadingMore}>{loadingMore?'Loading…':`Load more (${(transactionPaging.count||0)-transactions.length} remaining)`}</button>}
     </Surface>
   </div>;
 }

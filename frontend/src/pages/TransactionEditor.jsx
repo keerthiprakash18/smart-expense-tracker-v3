@@ -26,7 +26,7 @@ export default function TransactionEditor() {
 
   useEffect(()=>{
     if (editing && existing) setForm({ transaction_type:existing.transaction_type || 'EXPENSE', title:existing.title || '', amount:existing.amount || '', category:existing.category || 'General', account:String(existing.account || ''), payment_method:existing.payment_method || 'UPI', date:existing.date || new Date().toISOString().slice(0,10), time:existing.time || '12:00', notes:existing.notes || '', is_recurring:Boolean(existing.is_recurring) });
-    else if (!editing && accounts[0]?.id && !form.account) setForm((prev)=>({...prev,account:String(accounts[0].id)}));
+    if (!editing && accounts[0]?.id && !form.account) setForm((prev)=>({...prev,account:String(accounts[0].id)}));
   },[editing,existing,accounts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(()=>{ if (!editing && new URLSearchParams(location.search).get('scan')==='1') setScanOpen(true); },[editing,location.search]);
@@ -41,8 +41,10 @@ export default function TransactionEditor() {
     e.preventDefault();
     if (!form.title.trim() || Number(form.amount)<=0 || !form.account) { notify('Add a title, valid amount and account','error'); return; }
     setSaving(true);
-    try { editing ? await updateTransaction(id,form) : await createTransaction(form); navigate('/transactions',{replace:true}); }
-    catch(err){ notify(err.response?.data?.error || err.response?.data?.detail || 'Unable to save transaction','error'); }
+    try {
+      if (editing) { await updateTransaction(id,form); } else { await createTransaction(form); }
+      navigate('/transactions',{replace:true});
+    }catch(err){ notify(err.response?.data?.error || err.response?.data?.detail || 'Unable to save transaction','error'); }
     finally{ setSaving(false); }
   };
 

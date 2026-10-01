@@ -108,9 +108,29 @@ STORAGES = {
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# Receipt retention: S3/R2 is durable, container-local filesystem is not.
+# Receipts must stay reachable either way, so local media is served explicitly
+# when durable storage is missing and the operator is warned about it.
+S3_STORAGE_CONFIGURED = bool(os.getenv("AWS_STORAGE_BUCKET_NAME", "").strip())
+MEDIA_STORAGE_DURABLE = S3_STORAGE_CONFIGURED
+MEDIA_SERVE_ENABLED = (
+    DEBUG
+    or not S3_STORAGE_CONFIGURED
+    or os.getenv("ENABLE_MEDIA_SERVE", "False").lower() in {"1", "true", "yes", "on"}
+)
+
+if not MEDIA_STORAGE_DURABLE:
+    import logging
+
+    logging.getLogger("django").warning(
+        "S3/R2 receipt storage is not configured. Receipts are being written to the "
+        "local filesystem, which is not durable on ephemeral containers. Set the "
+        "AWS_* variables (see PRODUCTION_READINESS.md) for permanent retention."
+    )
+
 # Optional S3 / Cloudflare R2 receipt storage. If bucket credentials are not
 # configured the app safely falls back to local filesystem storage.
-if os.getenv("AWS_STORAGE_BUCKET_NAME", "").strip():
+if S3_STORAGE_CONFIGURED:
     STORAGES["default"] = {"BACKEND": "storages.backends.s3.S3Storage"}
     AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
     AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "")

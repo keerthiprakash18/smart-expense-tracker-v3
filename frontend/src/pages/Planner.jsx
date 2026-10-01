@@ -15,6 +15,7 @@ export default function Planner(){
   const [budgets,setBudgets]=useState([]); const [recurring,setRecurring]=useState([]); const [transfers,setTransfers]=useState([]); const [cards,setCards]=useState([]); const [categories,setCategories]=useState([]);
   const [calendar,setCalendar]=useState({transactions:[],bills:[],transfers:[],recurring:[]}); const [month,setMonth]=useState(monthNow());
   const [loading,setLoading]=useState(true); const [saving,setSaving]=useState(false);
+  const [cardPrompt,setCardPrompt]=useState(null);
   const backupInput=useRef(null); const csvInput=useRef(null);
 
   const load=useCallback(async()=>{setLoading(true);try{const [b,r,t,c,cat,cal]=await Promise.all([
@@ -28,7 +29,8 @@ export default function Planner(){
   const createTransfer=async(e)=>{e.preventDefault();const f=new FormData(e.currentTarget);setSaving(true);try{await api.post('/api/v3/transfers/',{from_account:f.get('from_account'),to_account:f.get('to_account'),amount:f.get('amount'),date:f.get('date'),notes:f.get('notes')||''});e.currentTarget.reset();notify('Transfer completed');await load();await refresh()}catch(err){notify(err.response?.data?.non_field_errors?.[0]||err.response?.data?.error||'Unable to transfer','error')}finally{setSaving(false)}};
   const createCard=async(e)=>{e.preventDefault();const f=new FormData(e.currentTarget);setSaving(true);try{await api.post('/api/v3/credit-cards/',{name:f.get('name'),last4:f.get('last4'),credit_limit:f.get('credit_limit'),outstanding:f.get('outstanding')||0,statement_day:Number(f.get('statement_day')),due_day:Number(f.get('due_day')),linked_account:f.get('linked_account')||null});e.currentTarget.reset();notify('Credit card added');await load()}catch(err){notify(err.response?.data?.last4?.[0]||'Unable to add card','error')}finally{setSaving(false)}};
   const createCategory=async(e)=>{e.preventDefault();const f=new FormData(e.currentTarget);setSaving(true);try{await api.post('/api/v3/categories/',{name:f.get('name'),category_type:f.get('category_type'),color:f.get('color')||'#0A84FF',icon:'Tag'});e.currentTarget.reset();notify('Category added');await load()}catch(err){notify(err.response?.data?.name?.[0]||'Unable to add category','error')}finally{setSaving(false)}};
-  const cardActivity=async(card,type)=>{const amount=window.prompt(`${type==='PURCHASE'?'Purchase':'Payment'} amount`);if(!amount)return;let payment_account=null;if(type==='PAYMENT'&&accounts.length){payment_account=window.prompt(`Payment account ID: ${accounts.map(a=>`${a.id}=${a.name}`).join(', ')}`,accounts[0].id);if(!payment_account)return;}try{await api.post(`/api/v3/credit-cards/${card.id}/activity/`,{activity_type:type,amount,date:today(),payment_account});notify(type==='PURCHASE'?'Purchase recorded':'Payment recorded');await load();await refresh()}catch(err){notify(err.response?.data?.error||'Unable to update card','error')}};
+  const cardActivity=(card,type)=>setCardPrompt({card,type});
+  const submitCardActivity=async(amount,paymentAccountId)=>{const cp=cardPrompt;if(!cp)return'';try{await api.post(`/api/v3/credit-cards/${cp.card.id}/activity/`,{activity_type:cp.type,amount,date:today(),payment_account:cp.type==='PAYMENT'?paymentAccountId:null});notify(cp.type==='PURCHASE'?'Purchase recorded':'Payment recorded');await load();await refresh();setCardPrompt(null);return '';}catch(err){return err.response?.data?.error||err.response?.data?.amount?.[0]||'Unable to update card';}};
 
   const downloadBackup=async()=>{try{const res=await api.get('/api/v3/backup/export/');const url=URL.createObjectURL(new Blob([JSON.stringify(res.data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download=`smart-expense-backup-${today()}.json`;a.click();URL.revokeObjectURL(url);notify('Backup downloaded')}catch{notify('Unable to create backup','error')}};
   const importBackup=async(file)=>{if(!file)return;if(!window.confirm('This will replace your current finance data with the backup. Continue?'))return;try{const data=JSON.parse(await file.text());await api.post('/api/v3/backup/import/',{data,confirm:true});notify('Backup restored');await refresh();await load()}catch(err){notify(err.response?.data?.error||'Backup restore failed','error')}};
@@ -49,5 +51,32 @@ export default function Planner(){
       {tab==='categories'&&<><Surface><form className="inline-form planner-form" onSubmit={createCategory}><input name="name" required placeholder="Custom category"/><select name="category_type"><option>EXPENSE</option><option>INCOME</option></select><input name="color" type="color" defaultValue="#0A84FF"/><button className="button primary" disabled={saving}><Plus size={16}/>Add category</button></form></Surface><div className="planner-card-grid">{categories.length?categories.map(x=><Surface key={x.id} className="planner-card"><div className="planner-card-head"><div><span className="micro-label">{x.category_type}</span><h3><span className="category-color" style={{background:x.color}}/> {x.name}</h3></div><button className="icon-button danger" onClick={()=>remove('categories',x.id)}><Trash2 size={15}/></button></div></Surface>):<Surface><EmptyState title="No custom categories" description="Create categories that match your own spending style."/></Surface>}</div></>}
       {tab==='calendar'&&<><Surface><div className="section-heading"><div><span>FINANCIAL CALENDAR</span><h2>Month view</h2></div><input className="month-input" type="month" value={month} onChange={e=>setMonth(e.target.value)}/></div>{eventRows.length?<div className="calendar-list">{eventRows.map((x,i)=><div className="calendar-row" key={`${x.date}-${i}`}><time>{x.date}</time><div><strong>{x.title}</strong><span>{x.meta}</span></div><b>{money(x.amount,symbol)}</b></div>)}</div>:<EmptyState title="Nothing scheduled" description="Transactions, bill due dates, transfers and recurring items appear here."/>}</Surface></>}
       {tab==='backup'&&<><Surface><div className="backup-grid"><button className="backup-action" onClick={downloadBackup}><Download size={24}/><strong>Download full backup</strong><span>JSON snapshot of accounts, transactions, bills, goals, budgets, recurring rules and cards.</span></button><button className="backup-action" onClick={()=>backupInput.current?.click()}><Upload size={24}/><strong>Restore backup</strong><span>Replace this account's finance data from a Smart Expense V3 backup.</span></button><button className="backup-action" onClick={()=>csvInput.current?.click()}><FolderUp size={24}/><strong>Import CSV</strong><span>Bulk import up to 1000 transactions using common transaction columns.</span></button></div><input ref={backupInput} type="file" accept="application/json,.json" hidden onChange={e=>{importBackup(e.target.files?.[0]);e.target.value=''}}/><input ref={csvInput} type="file" accept="text/csv,.csv" hidden onChange={e=>{importCsv(e.target.files?.[0]);e.target.value=''}}/></Surface></>}
-    </>}</div>
+    </>}
+    {cardPrompt&&<CardActivityModal prompt={cardPrompt} accounts={accounts} onSubmit={submitCardActivity} onClose={()=>setCardPrompt(null)}/>}
+  </div>;
+}
+
+function CardActivityModal({prompt,accounts,onSubmit,onClose}) {
+  const isPayment=prompt.type==='PAYMENT';
+  const [amount,setAmount]=useState('');
+  const [paymentAccount,setPaymentAccount]=useState(accounts[0]?.id||'');
+  const [error,setError]=useState('');
+  const [busy,setBusy]=useState(false);
+  const submit=async(e)=>{
+    e.preventDefault();
+    const numeric=Number(amount);
+    if(!Number.isFinite(numeric)||numeric<=0){setError('Enter an amount greater than zero.');return}
+    if(isPayment&&!paymentAccount){setError('Choose the account the payment comes from.');return}
+    setBusy(true);
+    const message=await onSubmit(amount,isPayment?paymentAccount:null);
+    setBusy(false);
+    if(message)setError(message);
+  };
+  return <div className="modal-backdrop" onMouseDown={onClose}><form className="modal-card" onSubmit={submit} onMouseDown={(e)=>e.stopPropagation()}>
+    <div className="modal-head"><div><span>{isPayment?'CARD PAYMENT':'CARD PURCHASE'}</span><h2>{prompt.card.name}{prompt.card.last4?` •••• ${prompt.card.last4}`:''}</h2></div><button type="button" className="icon-button" onClick={onClose}><X size={19}/></button></div>
+    <label><span>{isPayment?'Payment amount':'Purchase amount'}</span><input autoFocus required type="number" min="0.01" step="0.01" value={amount} onChange={(e)=>setAmount(e.target.value)} placeholder="0.00"/></label>
+    {isPayment&&<label><span>Payment account</span><select value={paymentAccount} onChange={(e)=>setPaymentAccount(e.target.value)}>{accounts.map((a)=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label>}
+    {error&&<div className="alert error">{error}</div>}
+    <button className="button primary full" disabled={busy}>{busy?'Recording…':isPayment?'Record payment':'Record purchase'}</button>
+  </form></div>;
 }

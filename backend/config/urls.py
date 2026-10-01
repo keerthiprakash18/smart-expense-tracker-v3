@@ -13,8 +13,16 @@ urlpatterns = [
     path("api/", include("expenses.urls")),
 ]
 
+# Dev convenience: plain static() media mount.
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+# Production without S3/R2: receipts are on the container filesystem and would
+# otherwise 404. Serve them through an authenticated, traversal-safe view.
+if getattr(settings, "MEDIA_SERVE_ENABLED", False) and not settings.DEBUG:
+    from expenses.media_views import ProtectedMediaView
+
+    urlpatterns.insert(0, path("media/<path:filepath>", ProtectedMediaView.as_view(), name="protected-media"))
 
 
 if settings.DEBUG or os.getenv("ENABLE_ADMIN", "False").lower() in {"1", "true", "yes", "on"}:

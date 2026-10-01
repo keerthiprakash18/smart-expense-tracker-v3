@@ -1,14 +1,8 @@
-import re
-
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from .models import Expense, MerchantRule, SecuritySettings
-
-
-def normalize_merchant(value):
-    value = re.sub(r"[^a-z0-9 ]+", " ", str(value or "").lower())
-    return re.sub(r"\s+", " ", value).strip()[:160]
+from .security_utils import normalize_merchant
 
 
 @receiver(post_save, sender=Expense)

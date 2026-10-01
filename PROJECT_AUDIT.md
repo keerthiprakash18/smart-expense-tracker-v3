@@ -64,3 +64,29 @@ The release removes the accidentally tracked `pydeps/` dependency copy and keeps
 - `frontend/dist/`
 - Android build/cache output
 - environment secret files
+
+## Hardening pass
+
+- **Receipts never silently 404.** Without S3/R2 the backend serves uploads
+  through an authenticated, traversal-safe `ProtectedMediaView`, and
+  `ReceiptVaultView` reports `storage_durable=false` so the UI warns the
+  operator. A startup log warning points at the missing `AWS_*` variables.
+- **Ledger scales.** `/api/expenses/` is now paginated (50/page, capped at 200)
+  and the client exposes a "Load more" control; the dashboard summary
+  aggregates borrowed/lent totals in SQL instead of iterating rows.
+- **Reads are reads.** Recurring processing and notification synthesis moved to
+  a daemon background thread (`expenses.jobs`) plus a `run_finance_jobs`
+  management command, so page loads no longer perform blocking writes.
+- **Scanner respects the theme.** `ReceiptScannerModal` dropped its hardcoded
+  dark inline styles for CSS variables, so the Pearl/light theme is usable.
+- **Less dead weight.** Removed the unused `expenses/ocr.py` and
+  `expenses/middleware.py` modules, the unreferenced `react-icons`/`react-is`
+  dependencies and ~6.5 MB of committed-but-unused brand PNGs.
+- **Operational visibility.** Every model (including all V3 models) is
+  registered in Django admin, and `Expense.category`/`Expense.date` carry
+  `db_index` for the heavy aggregation paths.
+- **One implementation.** Recovery-code consumption and merchant normalization
+  live in `security_utils.py` and are imported by the login, reset, signal and
+  scan paths.
+- **No native prompts.** Debt repayment, savings goal updates, card
+  purchase/payment and 2FA disable now use in-app modals with inline validation.
