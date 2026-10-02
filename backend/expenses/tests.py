@@ -150,7 +150,7 @@ class SmartExpenseApiTests(APITestCase):
                 "person_name": "Alex",
                 "amount": "1000.00",
                 "transaction_date": "2026-09-21",
-                "due_date": "2026-10-01",
+                "due_date": (timezone.localdate() + timedelta(days=30)).isoformat(),
                 "purpose": "Trip",
             },
             format="json",
