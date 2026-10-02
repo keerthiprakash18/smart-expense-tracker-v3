@@ -105,12 +105,21 @@ export function FinanceProvider({ children }) {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   const createTransaction = useCallback(async (payload) => {
-    const hasFile = payload.receipt_image instanceof File;
+    // A File (or any object value) must travel as multipart, never JSON.
+    const needsFormData =
+      payload.receipt_image instanceof File ||
+      Object.values(payload).some((v) => v instanceof File || v instanceof Blob);
     let body = payload;
-    if (hasFile) {
+    if (needsFormData) {
       body = new FormData();
       Object.entries(payload).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '') body.append(key, value);
+        if (value === undefined || value === null) return;
+        if (value instanceof File || value instanceof Blob) {
+          body.append(key, value, value.name || 'upload');
+          return;
+        }
+        // FormData stringifies; booleans must survive the round trip.
+        body.append(key, typeof value === 'boolean' ? String(value) : value);
       });
     }
     const response = await api.post('/api/expenses/', body);

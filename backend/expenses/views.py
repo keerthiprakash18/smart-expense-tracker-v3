@@ -724,6 +724,51 @@ class ReceiptScanView(APIView):
             parsed["merchant_memory"] = True
         else:
             parsed["merchant_memory"] = False
+            # No learned rule, so ask the per-user model to second-guess the
+            # regex category. OCR's keyword list is generic ("cafe", "pizza"),
+            # while the model knows what *this* user calls things. When the two
+            # disagree the model wins at reasonable confidence, because the
+            # regex match is the weaker signal of the two. Both are returned so
+            # the client can show the alternative.
+            ocr_confidence = parsed.get("confidence", {})
+            try:
+                overall_confidence = float(ocr_confidence.get("overall") or 0)
+            except (TypeError, ValueError):
+                overall_confidence = 0.0
+
+            from . import ai_engine
+
+            ai_category, ai_confidence, ai_source = ai_engine.predict_category(
+                request.user,
+                str(parsed.get("merchant") or ""),
+                str(parsed.get("category") or ""),
+            )
+            parsed["ai_category"] = ai_category
+            parsed["ai_confidence"] = round(float(ai_confidence or 0), 2)
+            parsed["ai_source"] = ai_source
+            parsed["ocr_category"] = parsed.get("category")
+
+            disagree = bool(
+                ai_category
+                and parsed.get("category")
+                and ai_category.lower() != str(parsed["category"]).lower()
+            )
+            # The model is consulted whenever it is confident enough; a
+            # disagreement is surfaced to the user either way.
+            if ai_category and (disagree or overall_confidence < 0.70):
+                parsed["category_alternatives"] = {
+                    "ocr": parsed.get("category"),
+                    "model": ai_category,
+                    "model_confidence": round(float(ai_confidence or 0), 2),
+                }
+                if ai_confidence >= 0.45 or overall_confidence < 0.70:
+                    parsed["category"] = ai_category
+                    parsed["category_source"] = "model"
+                else:
+                    parsed["category_source"] = "ocr"
+            else:
+                parsed["category_source"] = "model" if ai_category else "ocr"
+                parsed["category_alternatives"] = None
         parsed_amount = safe_decimal(parsed.get("amount"))
         parsed_date = parsed.get("date") or None
 

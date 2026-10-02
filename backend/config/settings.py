@@ -17,7 +17,16 @@ def env_list(name, default=""):
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
-ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "localhost,127.0.0.1,.onrender.com,.up.railway.app")
+def env_bool(name, default=False):
+    return os.getenv(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
+
+
+# Django only auto-allows all hosts in DEBUG when ALLOWED_HOSTS is empty, so
+# the explicit list below must include the local/test hosts explicitly.
+if DEBUG:
+    ALLOWED_HOSTS = ["*"]
+else:
+    ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "localhost,127.0.0.1,.onrender.com,.up.railway.app")
 
 INSTALLED_APPS = [
     "django.contrib.admin",

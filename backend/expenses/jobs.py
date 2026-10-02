@@ -7,6 +7,8 @@ app startup signal, so API reads stay cheap and rules still fire on time.
 """
 
 import logging
+import os
+import sys
 import threading
 import time
 
@@ -67,8 +69,18 @@ def _job_loop():
 
 
 def start_background_jobs():
-    """Idempotently starts the periodic finance worker thread."""
+    """Idempotently starts the periodic finance worker thread.
+
+    The thread is daemonised, so it is not a correctness problem if it starts
+    before migrations have run in a one-off management command — the loop
+    catches the resulting database error and retries on the next tick. But
+    starting it during ``manage.py migrate`` or a data-only command is pure
+    noise, so it is skipped for those two entry points.
+    """
     global _JOB_THREAD, _JOB_STARTED
+
+    if os.environ.get("RUN_MAIN") != "true" and "migrate" in sys.argv[:2]:
+        return
 
     with _JOB_LOCK:
         if _JOB_STARTED:

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { CreditCard, KeyRound, Landmark, MoonStar, Plus, Save, ShieldCheck, Smartphone, User, Wallet } from 'lucide-react';
+import { Brain, CreditCard, KeyRound, Landmark, MoonStar, Plus, RefreshCw, Save, ShieldCheck, Smartphone, Sparkles, User, Wallet } from 'lucide-react';
 import api, { clearTokens } from '../services/api';
+import { getAIStatus, retrainModel } from '../services/ai';
 import { PageHeader, Surface, money } from '../components/Ui';
 import { useFinance } from '../context/FinanceContext';
 import { useTheme } from '../context/ThemeContext';
@@ -28,6 +29,7 @@ export default function Profile() {
     <Surface><div className="section-heading"><div><span>ACCOUNTS</span><h2>Your money sources</h2></div><button className="button ghost" onClick={()=>setAccountOpen(!accountOpen)}><Plus size={17}/> Add account</button></div>{accountOpen&&<AccountForm onSave={async(data)=>{try{await createAccount(data);setAccountOpen(false)}catch(err){notify(err.response?.data?.name?.[0]||'Unable to add account','error')}}}/>}<div className="account-grid">{accounts.map((a)=>{const Icon=accountIcons[a.account_type]||Wallet;return <div className="account-card" key={a.id}><div className="account-icon"><Icon size={20}/></div><div><strong>{a.name}</strong><span>{a.account_type}</span></div><b>{money(a.balance,profile?.currency||'₹')}</b></div>})}</div></Surface>
 
     <Surface><div className="section-heading"><div><span>SECURITY</span><h2>Password & access</h2></div><button className="button ghost" onClick={()=>setPasswordOpen(!passwordOpen)}><KeyRound size={17}/> Change password</button></div>{passwordOpen&&<PasswordForm notify={notify}/>}<div className="settings-note"><ShieldCheck size={20}/><div><strong>Private by design</strong><span>Each API endpoint is authenticated and scoped to your user account.</span></div></div></Surface>
+    <AIModelCard notify={notify}/>
     <SecurityCenter profile={profile} notify={notify}/>
     <DangerZone notify={notify}/>
   </div>;
@@ -36,6 +38,69 @@ export default function Profile() {
 function AccountForm({onSave}) { const [name,setName]=useState('');const [type,setType]=useState('BANK');const [balance,setBalance]=useState('0');return <form className="inline-form" onSubmit={e=>{e.preventDefault();onSave({name,account_type:type,balance})}}><input required value={name} onChange={e=>setName(e.target.value)} placeholder="Account name"/><select value={type} onChange={e=>setType(e.target.value)}>{['BANK','UPI','CASH','CARD','WALLET','CUSTOM'].map(x=><option key={x}>{x}</option>)}</select><input type="number" step="0.01" value={balance} onChange={e=>setBalance(e.target.value)} placeholder="Opening balance"/><button className="button primary">Add account</button></form> }
 
 function PasswordForm({notify}) { const [oldPassword,setOld]=useState('');const [newPassword,setNew]=useState('');const [saving,setSaving]=useState(false);const submit=async(e)=>{e.preventDefault();setSaving(true);try{await api.post('/api/change-password/',{old_password:oldPassword,new_password:newPassword});notify('Password updated. Sign in again.');clearTokens();window.location.hash='#/login';window.location.reload()}catch(err){notify(err.response?.data?.error||'Unable to update password','error')}finally{setSaving(false)}};return <form className="inline-form password" onSubmit={submit}><input required type="password" value={oldPassword} onChange={e=>setOld(e.target.value)} placeholder="Current password"/><input required type="password" minLength="8" value={newPassword} onChange={e=>setNew(e.target.value)} placeholder="New strong password"/><button className="button primary" disabled={saving}>{saving?'Updating…':'Update password'}</button></form> }
+
+
+function AIModelCard({notify}) {
+  const [status,setStatus]=useState(null);
+  const [busy,setBusy]=useState(false);
+
+  const load=async()=>{
+    const data=await getAIStatus();
+    setStatus(data);
+  };
+  useEffect(()=>{load()},[]);
+
+  const retrain=async()=>{
+    setBusy(true);
+    try{
+      const data=await retrainModel();
+      if(data){
+        setStatus((prev)=>({
+          ...(prev||{}),
+          training_samples:data.training_samples,
+          learned_categories:data.learned_categories,
+          ready:(data.training_samples||0)>=5,
+        }));
+        notify('Model retrained from your transaction history');
+      }else{
+        notify('Unable to retrain the model right now','error');
+      }
+    }finally{setBusy(false)}
+  };
+
+  if(!status) {
+    return <Surface><div className="section-heading"><div><span>ON-DEVICE INTELLIGENCE</span><h2>Your AI model</h2></div><Brain size={20}/></div>
+      <div className="settings-note"><Sparkles size={20}/><div><strong>Category suggestions</strong><span>Model status is unavailable — suggestions stay off until it responds.</span></div></div></Surface>;
+  }
+
+  const ready=Boolean(status.ready);
+  const samples=Number(status.training_samples||0);
+
+  return <Surface>
+    <div className="section-heading">
+      <div><span>ON-DEVICE INTELLIGENCE</span><h2>Your AI model</h2><p>Learns only from your own transactions. No data leaves your account.</p></div>
+      <Brain size={20}/>
+    </div>
+    <div className="ai-stat-grid">
+      <div className="ai-stat"><strong>{samples}</strong><span>Training samples</span></div>
+      <div className="ai-stat"><strong>{status.learned_categories||0}</strong><span>Learned categories</span></div>
+      <div className="ai-stat"><strong>{status.vocabulary_size||0}</strong><span>Vocabulary</span></div>
+      <div className="ai-stat"><strong>{status.merchant_rules||0}</strong><span>Merchants remembered</span></div>
+    </div>
+    <div className="settings-note">
+      <Sparkles size={20}/>
+      <div>
+        <strong>{ready?'Actively suggesting categories':'Warm-up in progress'}</strong>
+        <span>{ready
+          ? 'Predictions run on the title you type, before you pick a category.'
+          : `Suggestions become reliable after about five entries — you have ${samples}. Keep adding transactions.`}</span>
+      </div>
+    </div>
+    <button className="button ghost" disabled={busy||samples===0} onClick={retrain}>
+      <RefreshCw size={17} className={busy?'spin':''}/> {busy?'Retraining…':'Retrain from full history'}
+    </button>
+  </Surface>;
+}
 
 
 function SecurityCenter({notify}) {

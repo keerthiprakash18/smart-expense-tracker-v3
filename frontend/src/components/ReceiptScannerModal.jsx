@@ -337,10 +337,14 @@ export default function ReceiptScannerModal({
             <div className="scanner-meta">
               <span className="meta-pill">Confidence <strong>{Math.round(Number(result.confidence?.overall || 0) * 100)}%</strong></span>
               {result.merchant_memory && <span className="meta-pill">Merchant memory <strong>Matched</strong></span>}
+              {result.ai_category && !result.merchant_memory && <span className="meta-pill">AI <strong>{result.ai_category} · {Math.round(Number(result.ai_confidence || 0) * 100)}%</strong></span>}
               {result.tax_amount > 0 && <span className="meta-pill">Tax <strong>{result.tax_amount}</strong></span>}
               {result.gstin && <span className="meta-pill">GSTIN <strong>{result.gstin}</strong></span>}
               {result.upi_ref && <span className="meta-pill">UPI Ref <strong>{result.upi_ref}</strong></span>}
             </div>
+            {result.category_alternatives && <div className="alert info scanner-alt">
+              <span>OCR read <strong>{result.category_alternatives.ocr}</strong>; your model suggested <strong>{result.category_alternatives.model}</strong> ({Math.round(Number(result.category_alternatives.model_confidence || 0) * 100)}%). Pick the right one below.</span>
+            </div>}
             <div className="scanner-grid">
               <label><span>Amount</span><input value={result.amount || ''} onChange={(e) => setResult((p) => ({ ...p, amount: e.target.value }))} inputMode="decimal" /></label>
               <label><span>Transaction Date</span><input type="date" value={result.date || ''} onChange={(e) => setResult((p) => ({ ...p, date: e.target.value }))} /></label>

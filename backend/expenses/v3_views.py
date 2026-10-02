@@ -51,6 +51,7 @@ from .security_utils import (
     provisioning_uri,
     verify_totp,
 )
+
 from .serializers import ExpenseSerializer
 from .v3_serializers import (
     AccountTransferSerializer,
@@ -855,3 +856,141 @@ class TwoFactorDisableView(APIView):
         sec.recovery_codes = "[]"
         sec.save(update_fields=["two_factor_enabled", "totp_secret", "recovery_codes", "updated_at"])
         return Response({"message": "Two-factor authentication disabled."})
+
+
+class AIPredictView(APIView):
+    """Predicts a category for a transaction the user has not classified yet.
+
+    The engine checks learned merchant memory first (deterministic fast path),
+    then falls back to the per-user Naive Bayes model over title/notes words.
+
+    ``top_n`` requests a full ranked candidate list so the UI can offer
+    alternates when the top guess is weak, instead of forcing a binary
+    accept/reject of a single suggestion.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from . import ai_engine
+
+        title = str(request.data.get("title") or "").strip()
+        notes = str(request.data.get("notes") or "").strip()
+        amount = request.data.get("amount")
+        transaction_type = str(request.data.get("transaction_type") or "EXPENSE").upper()
+        if not title:
+            return Response({"error": "Provide a transaction title to classify."}, status=400)
+
+        top_n = 0
+        raw_n = request.data.get("top_n")
+        try:
+            candidate = int(raw_n) if raw_n is not None else 0
+            if 1 <= candidate <= 8:
+                top_n = candidate
+        except (TypeError, ValueError):
+            top_n = 0
+
+        category, payload, source = ai_engine.predict_category(
+            request.user, title, notes, top_k=top_n
+        )
+
+        if top_n:
+            candidates = [
+                {"category": name, "confidence": round(float(prob or 0), 2)}
+                for name, prob in payload
+            ]
+            result = {
+                "title": title,
+                "category": candidates[0]["category"] if candidates else None,
+                "confidence": candidates[0]["confidence"] if candidates else 0.0,
+                "source": source,
+                "candidates": candidates,
+                "learned": bool(candidates),
+            }
+        else:
+            result = {
+                "title": title,
+                "category": category,
+                "confidence": round(float(payload or 0), 2),
+                "source": source,
+                "learned": category is not None,
+            }
+
+        amount_value = safe_decimal(amount)
+        if result["category"] and amount_value > 0:
+            anomaly = ai_engine.detect_anomaly(request.user, result["category"], amount_value)
+            if anomaly:
+                result["anomaly"] = anomaly
+
+        # A merchant the user has never classified is the one place the model
+        # is genuinely unsure, so expose the ranked alternatives there too.
+        if transaction_type and result["category"]:
+            result["transaction_type"] = transaction_type
+
+        return Response(result)
+
+
+class AIForecastView(APIView):
+    """Run-rate projection of where each category will land by month end."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from . import ai_engine
+
+        return Response(ai_engine.project_month_end(request.user))
+
+
+class AISubscriptionsView(APIView):
+    """Find recurring merchants the user pays repeatedly but does not track."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from . import ai_engine
+
+        return Response({"candidates": ai_engine.detect_subscriptions(request.user)})
+
+
+class AIStatusView(APIView):
+    """Reports how much the on-device model has learned about this user."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from . import ai_engine
+
+        model = ai_engine.get_user_model(request.user.pk)
+        categories = len(model.classifier.category_doc_counts)
+        samples = sum(model.classifier.category_doc_counts.values())
+        anomaly_categories = sum(1 for stats in model.anomaly.stats.values() if stats[2] >= 3)
+        return Response({
+            "learned_categories": categories,
+            "training_samples": samples,
+            "vocabulary_size": len(model.classifier.vocabulary),
+            "anomaly_categories": anomaly_categories,
+            "merchant_rules": MerchantRule.objects.filter(user=request.user).count(),
+            "ready": samples >= 5,
+            "note": (
+                "The model learns from every transaction you confirm. "
+                "Suggestions become reliable after about five entries."
+            ) if samples < 5 else "Model is actively suggesting categories.",
+        })
+
+
+class AIRetrainView(APIView):
+    """Rebuilds the on-device model from the user's full history."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_scope = "imports"
+
+    def post(self, request):
+        from . import ai_engine
+
+        model = ai_engine.retrain_from_history(request.user)
+        samples = sum(model.classifier.category_doc_counts.values())
+        return Response({
+            "message": "Model retrained from your transaction history.",
+            "training_samples": samples,
+            "learned_categories": len(model.classifier.category_doc_counts),
+        })

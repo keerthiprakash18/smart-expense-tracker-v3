@@ -4,6 +4,7 @@ import { ArrowRight, BarChart3, Camera, CircleDollarSign, Plus, ReceiptText, Tre
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { useFinance } from '../context/FinanceContext';
 import api from '../services/api';
+import { getForecast } from '../services/ai';
 import { EmptyState, MetricCard, PageHeader, Progress, Skeleton, Surface, TransactionIcon, money } from '../components/Ui';
 
 const palette = ['var(--accent)', '#8c7bff', '#ffb454', '#ff6b7a', '#46d7a6', '#7dd3fc'];
@@ -12,8 +13,10 @@ export default function Overview() {
   const navigate = useNavigate();
   const { profile, accounts, transactions, summary, loading, error } = useFinance();
   const [insights,setInsights]=useState([]);
+  const [forecast,setForecast]=useState(null);
   const profileCurrency = profile?.currency;
   useEffect(()=>{let live=true;api.get('/api/v3/insights/').then(r=>{if(live)setInsights(r.data?.insights||[])}).catch(()=>{});return()=>{live=false}},[loading, profileCurrency]);
+  useEffect(()=>{let live=true;getForecast().then((data)=>{if(live&&data)setForecast(data)}).catch(()=>{});return()=>{live=false}},[loading, profileCurrency]);
   const symbol = profile?.currency || '₹';
   const now = new Date();
   const monthTx = useMemo(() => transactions.filter((tx) => {
@@ -60,6 +63,16 @@ export default function Overview() {
     {insights.length > 0 && <Surface className="insights-surface">
       <div className="section-heading"><div><span>SMART INSIGHTS</span><h2>What changed</h2></div></div>
       <div className="insight-grid">{insights.slice(0,4).map((item,i)=><div className="smart-insight" key={`${item.kind}-${i}`}><strong>{item.title}</strong><span>{item.message}</span></div>)}</div>
+    </Surface>}
+
+    {forecast?.categories?.length > 0 && <Surface className="forecast-surface">
+      <div className="section-heading"><div><span>AI FORECAST</span><h2>Where this month is heading</h2></div><span className="micro-label">{forecast.days_left} days left</span></div>
+      <div className="forecast-grid">{forecast.categories.slice(0,4).map((item)=><div className={`forecast-card${item.over_budget?' over':''}`} key={item.category}>
+        <div className="forecast-head"><strong>{item.category}</strong><span>{money(item.projected,symbol)} <em>projected</em></span></div>
+        <div className="forecast-bar"><i style={{width:`${Math.min(100,(Number(item.spent)/Math.max(1,Number(item.projected)))*100)}%`}}/></div>
+        <div className="forecast-meta"><span>{money(item.spent,symbol)} so far</span><span>{money(item.daily_rate,symbol)}/day</span></div>
+        {item.message&&<div className="forecast-note">{item.message}</div>}
+      </div>)}</div>
     </Surface>}
 
     <section className="quick-grid">

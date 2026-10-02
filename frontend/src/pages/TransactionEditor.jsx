@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Camera, Check, Receipt, Save } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import ReceiptScannerModal from '../components/ReceiptScannerModal';
+import CategorySuggestion from '../components/CategorySuggestion';
 import { PageHeader, Surface } from '../components/Ui';
 import { useFinance } from '../context/FinanceContext';
 import api from '../services/api';
@@ -37,6 +38,13 @@ export default function TransactionEditor() {
   const typeCats=[...new Set([...baseCats,...customCats])];
   useEffect(()=>{ if (!typeCats.includes(form.category)) set('category',typeCats[0]); },[form.transaction_type]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const aiExtraParams = useMemo(()=>({
+    notes: form.notes,
+    amount: Number(form.amount) > 0 ? form.amount : null,
+    transactionType: form.transaction_type,
+  }),[form.notes, form.amount, form.transaction_type]);
+  const acceptSuggestion=(value)=>{ if (value) set('category', value); };
+
   const submit=async(e)=>{
     e.preventDefault();
     if (!form.title.trim() || Number(form.amount)<=0 || !form.account) { notify('Add a title, valid amount and account','error'); return; }
@@ -58,6 +66,7 @@ export default function TransactionEditor() {
         <div className="section-heading"><div><span>DETAILS</span><h2>{editing?'Edit entry':'Transaction details'}</h2></div>{!editing&&<button type="button" className="button scan" onClick={()=>setScanOpen(true)}><Camera size={17}/> Scan receipt</button>}</div>
         <div className="amount-input"><span>{profile?.currency || '₹'}</span><input autoFocus={!editing} type="number" min="0.01" step="0.01" value={form.amount} onChange={(e)=>set('amount',e.target.value)} placeholder="0.00"/></div>
         <div className="form-grid two"><label><span>Title / Merchant</span><input value={form.title} onChange={(e)=>set('title',e.target.value)} placeholder="e.g. Dinner at Spice Hub"/></label><label><span>Category</span><select value={form.category} onChange={(e)=>set('category',e.target.value)}>{typeCats.map((x)=><option key={x}>{x}</option>)}</select></label></div>
+        <CategorySuggestion title={form.title} extraParams={aiExtraParams} currentCategory={form.category} onSelect={acceptSuggestion} />
         <div className="form-grid two"><label><span>Account</span><select value={form.account} onChange={(e)=>set('account',e.target.value)}><option value="">Select account</option>{accounts.map((a)=><option key={a.id} value={a.id}>{a.name}</option>)}</select></label><label><span>Payment method</span><select value={form.payment_method} onChange={(e)=>set('payment_method',e.target.value)}>{['UPI','Cash','Debit Card','Credit Card','Bank Transfer','Wallet','Other'].map((x)=><option key={x}>{x}</option>)}</select></label></div>
         <div className="form-grid two"><label><span>Date</span><input type="date" value={form.date} onChange={(e)=>set('date',e.target.value)}/></label><label><span>Time</span><input type="time" value={form.time} onChange={(e)=>set('time',e.target.value)}/></label></div>
         <label><span>Notes</span><textarea rows="4" value={form.notes} onChange={(e)=>set('notes',e.target.value)} placeholder="Optional note, order reference or context…"/></label>
