@@ -36,7 +36,13 @@ class LoginRateThrottle(ScopedRateThrottle):
         except ImportError:  # pragma: no cover - Django < 5.0 shim
             quote_etag = lambda value: value  # noqa: E731
 
-        identifier = str(request.data.get("username") or request.data.get("email") or "").strip()
+        # ``request.data`` parses the request body, which can raise if a prior
+        # consumer already read ``request.body`` raw. Throttling must never turn
+        # a parse problem into a 500, so fall back to the IP-only bucket.
+        try:
+            identifier = str(request.data.get("username") or request.data.get("email") or "").strip()
+        except Exception:
+            identifier = ""
         account = quote_etag(identifier.lower()) if identifier else "unknown"
         return self.cache_format % {"scope": self.scope, "ident": f"{account}:{ident}"}
 
