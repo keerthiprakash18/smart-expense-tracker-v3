@@ -577,9 +577,17 @@ class DebtPaymentListCreateView(generics.ListCreateAPIView):
             payment = serializer.save(debt=locked)
             locked.amount_paid = safe_decimal(locked.amount_paid) + payment_amount
             remaining_after = locked.amount - locked.amount_paid
-            locked.status = "PAID" if remaining_after <= 0 else "PARTIAL"
-            if locked.due_date and remaining_after > 0 and locked.due_date < timezone.localdate():
+            # Payment state wins over the overdue flag: a partly-paid debt is
+            # PARTIAL (the serializer still reports it as overdue), so a
+            # repayment never silently discards the fact that money was paid.
+            if remaining_after <= 0:
+                locked.status = "PAID"
+            elif locked.amount_paid > 0:
+                locked.status = "PARTIAL"
+            elif locked.due_date and locked.due_date < timezone.localdate():
                 locked.status = "OVERDUE"
+            else:
+                locked.status = "PENDING"
             locked.save(update_fields=["amount_paid", "status", "updated_at"])
 
         return Response(self.get_serializer(payment).data, status=status.HTTP_201_CREATED)

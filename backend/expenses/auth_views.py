@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -14,10 +15,36 @@ from .security_utils import consume_recovery_code, verify_totp
 from .views import ChangePasswordView, RegisterView, UserProfileView
 
 
+class LoginRateThrottle(ScopedRateThrottle):
+    """Rate-limits login by account, not just by IP.
+
+    A pure IP bucket is too blunt: every user on a shared office NAT or a
+    mobile carrier shares one bucket, so a handful of legitimate sign-ins can
+    lock each other out. We scope the bucket to ``<account>:<client ip>``,
+    which is also strictly better brute-force protection — an attacker is
+    confined to the victim's bucket instead of a shared one. Requests that
+    name an unknown account fall back to the IP-only bucket, so a probing
+    scan still pays the cost.
+    """
+
+    scope = "login"
+
+    def get_cache_key(self, request, view):
+        ident = self.get_ident(request)
+        try:
+            from django.utils.http import quote_etag
+        except ImportError:  # pragma: no cover - Django < 5.0 shim
+            quote_etag = lambda value: value  # noqa: E731
+
+        identifier = str(request.data.get("username") or request.data.get("email") or "").strip()
+        account = quote_etag(identifier.lower()) if identifier else "unknown"
+        return self.cache_format % {"scope": self.scope, "ident": f"{account}:{ident}"}
+
+
 class LoginView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
-    throttle_scope = "login"
+    throttle_classes = [LoginRateThrottle]
 
     def post(self, request):
         identifier = str(request.data.get("username") or request.data.get("email") or "").strip()

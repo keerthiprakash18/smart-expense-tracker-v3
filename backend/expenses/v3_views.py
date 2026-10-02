@@ -795,8 +795,6 @@ class TwoFactorSetupView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        import qrcode
-
         sec = get_security(request.user)
         secret = generate_totp_secret()
         uri = provisioning_uri(secret, request.user.email or request.user.username)
@@ -806,16 +804,29 @@ class TwoFactorSetupView(APIView):
         sec.recovery_codes = "[]"
         sec.save(update_fields=["totp_secret", "two_factor_enabled", "recovery_codes", "updated_at"])
 
-        image = qrcode.make(uri)
-        buffer = io.BytesIO()
-        image.save(buffer, format="PNG")
-        qr_data_url = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+        # The QR code is a convenience, not a dependency. If the ``qrcode``
+        # package is unavailable the setup still works through the manual key,
+        # so a missing optional dependency can never lock 2FA out.
+        qr_data_url = ""
+        try:
+            import qrcode
+
+            image = qrcode.make(uri)
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG")
+            qr_data_url = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+        except Exception:
+            qr_data_url = ""
 
         return Response({
             "secret": secret,
             "otpauth_uri": uri,
             "qr_data_url": qr_data_url,
-            "message": "Scan this QR code with an authenticator app. The app generates the 6-digit code locally.",
+            "message": (
+                "Scan this QR code with an authenticator app. The app generates the 6-digit code locally."
+                if qr_data_url else
+                "QR rendering is unavailable — enter the manual setup key in your authenticator app."
+            ),
         })
 
 

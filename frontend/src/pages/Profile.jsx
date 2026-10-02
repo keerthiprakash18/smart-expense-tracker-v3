@@ -56,7 +56,7 @@ function AIModelCard({notify}) {
       const data=await retrainModel();
       if(data){
         setStatus((prev)=>({
-          ...(prev||{}),
+          ...prev,
           training_samples:data.training_samples,
           learned_categories:data.learned_categories,
           ready:(data.training_samples||0)>=5,
