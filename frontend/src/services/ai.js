@@ -11,6 +11,7 @@ import api from './api';
 const PREDICT_DEBOUNCE_MS = 350;
 
 let predictTimer = null;
+let predictToken = 0;
 
 /**
  * Ask the engine for category candidates for a transaction that has not been
@@ -39,6 +40,9 @@ export async function predictCategory({ title, notes = '', amount = null, topN =
  * Debounced variant for typing in a form. Resolves to null for an empty title,
  * an aborted request or a network failure — callers must treat null as "no
  * opinion" and never block the user on it.
+ *
+ * The timer is paired with a monotonic token: a slow request from an earlier
+ * keystroke must never overwrite the result of the latest one.
  */
 export function predictCategoryDebounced(params, callback) {
   if (predictTimer) clearTimeout(predictTimer);
@@ -47,11 +51,23 @@ export function predictCategoryDebounced(params, callback) {
     callback(null);
     return () => {};
   }
+  const token = ++predictToken;
   predictTimer = setTimeout(() => {
-    predictCategory(params).then(callback).catch(() => callback(null));
+    predictTimer = null;
+    predictCategory(params)
+      .then((data) => {
+        if (token === predictToken) callback(data);
+      })
+      .catch(() => {
+        if (token === predictToken) callback(null);
+      });
   }, PREDICT_DEBOUNCE_MS);
   return () => {
-    if (predictTimer) clearTimeout(predictTimer);
+    if (predictTimer) {
+      clearTimeout(predictTimer);
+      predictTimer = null;
+    }
+    predictToken++;
   };
 }
 

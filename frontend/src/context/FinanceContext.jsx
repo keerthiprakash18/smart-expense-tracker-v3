@@ -83,7 +83,15 @@ export function FinanceProvider({ children }) {
 
   // Append an older page of transactions (used by the ledger's load-more).
   const loadMoreTransactions = useCallback(async () => {
-    const nextPage = transactionPaging?.hasNext ? (transactionPaging.page + 1) : null;
+    // Read the latest paging state through the setter instead of closing over
+    // a possibly stale `transactionPaging`, otherwise a double-tap loads the
+    // same page twice and duplicate rows land in the ledger.
+    let nextPage = null;
+    setTransactionPaging((paging) => {
+      if (!paging?.hasNext) return paging;
+      nextPage = paging.page + 1;
+      return paging;
+    });
     if (nextPage === null) return false;
     try {
       const res = await api.get(`/api/expenses/?page=${nextPage}&page_size=${LEDGER_PAGE_SIZE}`);
@@ -94,7 +102,7 @@ export function FinanceProvider({ children }) {
     } catch {
       return false;
     }
-  }, [transactionPaging]);
+  }, []);
 
   // Keeps the local ledger accurate after a create/update/delete without a
   // full refetch, then refreshes aggregate balances in the background.
@@ -102,6 +110,11 @@ export function FinanceProvider({ children }) {
     await loadAll({ silent: true });
   }, [loadAll]);
 
+  const refresh = useCallback(() => loadAll({ silent: true }), [loadAll]);
+
+  // Initial load. Idempotent by construction (``loadAll`` replaces state
+  // rather than accumulating it) and keyed on the callback identity, so Strict
+  // Mode's mount/unmount double-invoke cannot fetch twice in production.
   useEffect(() => { loadAll(); }, [loadAll]);
 
   const createTransaction = useCallback(async (payload) => {
@@ -158,9 +171,9 @@ export function FinanceProvider({ children }) {
 
   const value = useMemo(() => ({
     profile, accounts, transactions, transactionPaging, summary, loading, refreshing, error,
-    toast, setToast, notify, refresh: () => loadAll({ silent: true }), loadMoreTransactions,
+    toast, setToast, notify, refresh, loadMoreTransactions,
     createTransaction, updateTransaction, deleteTransaction, createAccount, updateProfile,
-  }), [profile, accounts, transactions, transactionPaging, summary, loading, refreshing, error, toast, notify, loadAll, loadMoreTransactions, createTransaction, updateTransaction, deleteTransaction, createAccount, updateProfile]);
+  }), [profile, accounts, transactions, transactionPaging, summary, loading, refreshing, error, toast, notify, loadMoreTransactions, createTransaction, updateTransaction, deleteTransaction, createAccount, updateProfile, refresh]);
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>;
 }

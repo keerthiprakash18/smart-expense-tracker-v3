@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Camera, Check, Receipt, Save } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import ReceiptScannerModal from '../components/ReceiptScannerModal';
@@ -25,10 +25,19 @@ export default function TransactionEditor() {
   const [saving,setSaving]=useState(false);
   const [form,setForm]=useState({ transaction_type:'EXPENSE', title:'', amount:'', category:'Food & Dining', account:'', payment_method:'UPI', date:new Date().toISOString().slice(0,10), time:new Date().toTimeString().slice(0,5), notes:'', is_recurring:false });
 
+  // Seed the form from the record being edited. The effect depends only on
+  // the record id (never on the mutable form), so a refresh of the parent list
+  // can never clobber the user's in-progress edits.
   useEffect(()=>{
-    if (editing && existing) setForm({ transaction_type:existing.transaction_type || 'EXPENSE', title:existing.title || '', amount:existing.amount || '', category:existing.category || 'General', account:String(existing.account || ''), payment_method:existing.payment_method || 'UPI', date:existing.date || new Date().toISOString().slice(0,10), time:existing.time || '12:00', notes:existing.notes || '', is_recurring:Boolean(existing.is_recurring) });
-    if (!editing && accounts[0]?.id && !form.account) setForm((prev)=>({...prev,account:String(accounts[0].id)}));
-  },[editing,existing,accounts]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!editing || !existing) return;
+    setForm({ transaction_type:existing.transaction_type || 'EXPENSE', title:existing.title || '', amount:existing.amount || '', category:existing.category || 'General', account:String(existing.account || ''), payment_method:existing.payment_method || 'UPI', date:existing.date || new Date().toISOString().slice(0,10), time:existing.time || '12:00', notes:existing.notes || '', is_recurring:Boolean(existing.is_recurring) });
+  },[editing, String(existing?.id || '')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Default the account on a brand-new entry once the accounts list resolves.
+  useEffect(()=>{
+    if (editing || form.account || !accounts[0]?.id) return;
+    setForm((prev)=>({...prev,account:String(accounts[0].id)}));
+  },[editing, Boolean(accounts[0]?.id)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(()=>{ if (!editing && new URLSearchParams(location.search).get('scan')==='1') setScanOpen(true); },[editing,location.search]);
   useEffect(()=>{let live=true;api.get('/api/v3/categories/').then(r=>{if(live)setCustomCategories(r.data||[])}).catch(()=>{});return()=>{live=false}},[]);
@@ -36,7 +45,20 @@ export default function TransactionEditor() {
   const baseCats=categories[form.transaction_type] || categories.EXPENSE;
   const customCats=customCategories.filter(x=>x.category_type===form.transaction_type || (form.transaction_type==='BILL' && x.category_type==='EXPENSE')).map(x=>x.name);
   const typeCats=[...new Set([...baseCats,...customCats])];
-  useEffect(()=>{ if (!typeCats.includes(form.category)) set('category',typeCats[0]); },[form.transaction_type]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Only reset when the *type* changes. Keying the effect on the type (not on
+  // the derived list) keeps it from re-firing after every keystroke and
+  // clobbering a category the user just picked or a value being edited.
+  const categoryKey=useRef(form.transaction_type);
+  useEffect(()=>{
+    if (categoryKey.current===form.transaction_type) return;
+    categoryKey.current=form.transaction_type;
+    setForm((prev)=>{
+      const list=categories[prev.transaction_type] || categories.EXPENSE;
+      const custom=customCategories.filter(x=>x.category_type===prev.transaction_type || (prev.transaction_type==='BILL' && x.category_type==='EXPENSE')).map(x=>x.name);
+      const allowed=new Set([...list,...custom]);
+      return allowed.has(prev.category) ? prev : { ...prev, category:[...allowed][0] };
+    });
+  },[form.transaction_type,customCategories]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const aiExtraParams = useMemo(()=>({
     notes: form.notes,

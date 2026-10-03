@@ -32,7 +32,7 @@ class ExpensePagination(PageNumberPagination):
             {
                 "count": self.page.paginator.count,
                 "page": self.page.number,
-                "page_size": self.get_page_size(self.request),
+                "page_size": self.get_page_size(self.request) or self.page_size,
                 "total_pages": self.page.paginator.num_pages,
                 "has_next": self.page.has_next(),
                 "has_previous": self.page.has_previous(),
@@ -42,7 +42,7 @@ class ExpensePagination(PageNumberPagination):
 
     def get_page_size(self, request):
         try:
-            return super().get_page_size(request)
+            return super().get_page_size(request) or self.page_size
         except (TypeError, ValueError):
             return self.page_size
 
@@ -157,11 +157,13 @@ class DeleteAccountView(APIView):
             return Response({"error": "Password is incorrect."}, status=400)
         user = request.user
         with transaction.atomic():
+            # File storage lives outside the database, so a plain ``user.delete()``
+            # would orphan the receipt blobs on disk. Delete them first, while the
+            # rows still exist; a failure here must not swallow the identity check
+            # the caller just passed, so the exception propagates and no data is
+            # removed until the files are actually gone.
             for expense in Expense.objects.filter(user=user).exclude(receipt_image="").exclude(receipt_image__isnull=True):
-                try:
-                    expense.receipt_image.delete(save=False)
-                except Exception:
-                    pass
+                expense.receipt_image.delete(save=False)
             user.delete()
         return Response({"message": "Account and associated data deleted."})
 

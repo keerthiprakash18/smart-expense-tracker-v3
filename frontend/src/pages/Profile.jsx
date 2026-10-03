@@ -107,6 +107,9 @@ function SecurityCenter({notify}) {
   const [status,setStatus]=useState({two_factor_enabled:false,recovery_codes_remaining:0});
   const [loading,setLoading]=useState(false);
   const [setup,setSetup]=useState(null);
+  // Gating the disable form on its own flag keeps it from rendering as soon as
+  // 2FA is enabled — the user has to actually click "Disable 2FA" to open it.
+  const [disableOpen,setDisableOpen]=useState(false);
   const [code,setCode]=useState('');
   const [showManualKey,setShowManualKey]=useState(false);
   const [recoveryCodes,setRecoveryCodes]=useState([]);
@@ -161,6 +164,7 @@ function SecurityCenter({notify}) {
       await api.post('/api/v3/security/2fa/disable/',{password,code:codeValue});
       notify('Two-factor authentication disabled');
       setDisableForm({password:'',code:''});
+      setDisableOpen(false);
       await load();
     }catch(err){
       notify(err.response?.data?.error||'Unable to disable 2FA','error');
@@ -203,7 +207,7 @@ function SecurityCenter({notify}) {
           <button
             className={'button ' + (status.two_factor_enabled?'ghost':'primary')}
             disabled={loading}
-            onClick={status.two_factor_enabled?disable2fa:start2fa}
+            onClick={status.two_factor_enabled?()=>setDisableOpen(true):start2fa}
           >
             {status.two_factor_enabled?'Disable 2FA':'Enable 2FA'}
           </button>
@@ -288,10 +292,10 @@ function SecurityCenter({notify}) {
       </div>
     }
 
-    {status.two_factor_enabled&&
-      <div className="modal-backdrop" onMouseDown={()=>setDisableForm((prev)=>prev.password||prev.code?prev:{password:'',code:''})}>
+    {status.two_factor_enabled&&disableOpen&&
+      <div className="modal-backdrop" onMouseDown={()=>setDisableForm({password:'',code:''})}>
         <form className="modal-card" onMouseDown={(e)=>e.stopPropagation()} onSubmit={disable2fa}>
-          <div className="modal-head"><div><span>DISABLE 2FA</span><h2>Turn off two-factor authentication</h2></div><button type="button" className="icon-button" onClick={()=>setDisableForm({password:'',code:''})}>×</button></div>
+          <div className="modal-head"><div><span>DISABLE 2FA</span><h2>Turn off two-factor authentication</h2></div><button type="button" className="icon-button" onClick={()=>{setDisableForm({password:'',code:''});setDisableOpen(false)}}>×</button></div>
           <div className="settings-note"><ShieldCheck size={20}/><div><strong>Confirm your identity</strong><span>Enter your password plus a current authenticator code or a recovery code.</span></div></div>
           <label><span>Current password</span><input required type="password" value={disableForm.password} onChange={(e)=>setDisableForm((p)=>({...p,password:e.target.value}))} autoComplete="current-password"/></label>
           <label><span>Authenticator or recovery code</span><input required inputMode="text" value={disableForm.code} onChange={(e)=>setDisableForm((p)=>({...p,code:e.target.value}))} placeholder="123456 or ABCDE-FGHIJ" autoComplete="one-time-code"/></label>

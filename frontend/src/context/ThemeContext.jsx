@@ -30,11 +30,11 @@ export function ThemeProvider({ children }) {
     if (meta) meta.setAttribute('content', isLight ? '#f5f9ff' : '#05090d');
   }, [theme, selected.mode, isLight]);
 
-  const toggleMode = () => setTheme(isLight ? 'obsidian' : 'pearl');
+  const toggleMode = React.useCallback(() => setTheme(isLight ? 'obsidian' : 'pearl'), [isLight]);
 
   const value = useMemo(
     () => ({ theme, setTheme, themes: THEMES, selectedTheme: selected, isLight, toggleMode }),
-    [theme, selected, isLight]
+    [theme, selected, isLight, toggleMode]
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

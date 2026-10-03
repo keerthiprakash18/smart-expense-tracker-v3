@@ -78,7 +78,9 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    const isAuthEndpoint = String(originalRequest?.url || "").includes("/api/token/");
+    const url = String(originalRequest?.url || "");
+    const isAuthEndpoint = url.includes("/api/token/");
+    const isRefreshCall = url.includes("/api/token/refresh/");
 
     if (
       error.response?.status === 401 &&
@@ -95,8 +97,14 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch {
         notifyAuthExpired();
+        return Promise.reject(error);
       }
-    } else if (error.response?.status === 401 && !isAuthEndpoint) {
+    }
+
+    // A 401 from any other authenticated endpoint (and nothing left to refresh
+    // with) means the session is gone — surface the expiry instead of looping
+    // back into a refresh attempt that cannot succeed.
+    if (error.response?.status === 401 && !isAuthEndpoint && !isRefreshCall) {
       notifyAuthExpired();
     }
 

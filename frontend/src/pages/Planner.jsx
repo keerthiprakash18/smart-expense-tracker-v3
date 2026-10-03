@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowRightLeft, CalendarDays, CreditCard, Download, FolderUp, Plus, Radar, Repeat2, Tags, Trash2, Upload, WalletCards } from 'lucide-react';
+import { ArrowRightLeft, CalendarDays, CreditCard, Download, FolderUp, Plus, Radar, Repeat2, Tags, Trash2, Upload, WalletCards, X } from 'lucide-react';
 import api from '../services/api';
 import { getSubscriptionCandidates } from '../services/ai';
 import { EmptyState, PageHeader, Progress, Surface, money } from '../components/Ui';

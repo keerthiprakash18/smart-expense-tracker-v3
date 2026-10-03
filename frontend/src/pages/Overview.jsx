@@ -18,11 +18,11 @@ export default function Overview() {
   useEffect(()=>{let live=true;api.get('/api/v3/insights/').then(r=>{if(live)setInsights(r.data?.insights||[])}).catch(()=>{});return()=>{live=false}},[loading, profileCurrency]);
   useEffect(()=>{let live=true;getForecast().then((data)=>{if(live&&data)setForecast(data)}).catch(()=>{});return()=>{live=false}},[loading, profileCurrency]);
   const symbol = profile?.currency || '₹';
-  const now = new Date();
+  const now = useMemo(() => new Date(), []);
   const monthTx = useMemo(() => transactions.filter((tx) => {
     const d = new Date(`${tx.date}T00:00:00`);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  }), [transactions]);
+  }), [transactions, now]);
   const monthSpend = useMemo(() => monthTx.filter((x) => ['EXPENSE','BILL'].includes(x.transaction_type)).reduce((s,x) => s + Number(x.amount || 0), 0), [monthTx]);
   const monthIncome = useMemo(() => monthTx.filter((x) => x.transaction_type === 'INCOME').reduce((s,x) => s + Number(x.amount || 0), 0), [monthTx]);
   const budget = Number(profile?.monthly_budget || summary.monthly_budget || 0);

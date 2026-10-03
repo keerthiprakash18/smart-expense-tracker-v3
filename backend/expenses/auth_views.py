@@ -1,5 +1,3 @@
-import json
-
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from rest_framework import status
@@ -12,7 +10,6 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from .models import SecuritySettings
 from .security_utils import consume_recovery_code, verify_totp
-from .views import ChangePasswordView, RegisterView, UserProfileView
 
 
 class LoginRateThrottle(ScopedRateThrottle):
@@ -77,7 +74,7 @@ class LoginView(APIView):
         return Response({"refresh": str(refresh), "access": str(refresh.access_token)}, status=200)
 
 
-__all__ = ["LoginView", "LogoutView", "ThrottledTokenRefreshView", "RegisterView", "UserProfileView", "ChangePasswordView"]
+__all__ = ["LoginView", "LogoutView", "ThrottledTokenRefreshView"]
 
 
 

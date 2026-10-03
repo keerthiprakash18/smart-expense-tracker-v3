@@ -38,15 +38,11 @@ export default function ReceiptScannerModal({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [accountId, setAccountId] = useState(accounts[0]?.id ? String(accounts[0].id) : '');
+  // Pre-select the primary account. Lazily initialised state keeps the user's
+  // later selection intact while avoiding a setState-in-effect on mount.
+  const [accountId, setAccountId] = useState(() => accounts[0]?.id ? String(accounts[0].id) : '');
   const [notes, setNotes] = useState('Scanned Document');
   const [duplicateMatch, setDuplicateMatch] = useState(null);
-
-  useEffect(() => {
-    if (accounts.length && !accountId) {
-      setAccountId(String(accounts[0].id));
-    }
-  }, [accounts, accountId]);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -226,7 +222,7 @@ export default function ReceiptScannerModal({
         result.gstin ? `GSTIN: ${result.gstin}` : '',
         result.upi_ref ? `UPI Ref: ${result.upi_ref}` : ''
       ].filter(Boolean);
-      const enrichedNotes = [notes, ...metadata].filter(Boolean).join(' â€¢ ');
+      const enrichedNotes = [notes, ...metadata].filter(Boolean).join(' • ');
       const confidence = Math.round(Number(result.confidence?.overall || 0) * 100);
       const success = await onConfirmExpense?.({
         title: result.merchant || 'Scanned Receipt',
@@ -324,7 +320,7 @@ export default function ReceiptScannerModal({
             <div className="scanner-actions">
               <button type="button" onClick={retake} className="button ghost"><RotateCcw size={17} /> Retake</button>
               <button type="button" onClick={() => scanReceipt()} disabled={loading} className="button primary">
-                <ScanLine size={18} /> {loading ? 'Reading receiptâ€¦' : 'Scan Again'}
+                <ScanLine size={18} /> {loading ? 'Reading receipt…' : 'Scan Again'}
               </button>
             </div>
           </div>
@@ -333,7 +329,7 @@ export default function ReceiptScannerModal({
         {mode === 'result' && (
           <div>
             <div className="alert success"><CheckCircle2 size={18} /> Receipt scanned automatically. Verify the fields before saving.</div>
-            {duplicateMatch && <div className="alert warning"><AlertTriangle size={16} /> Possible duplicate: {duplicateMatch.title || 'existing transaction'} â€¢ {duplicateMatch.date || ''} â€¢ {duplicateMatch.amount || ''}</div>}
+            {duplicateMatch && <div className="alert warning"><AlertTriangle size={16} /> Possible duplicate: {duplicateMatch.title || 'existing transaction'} • {duplicateMatch.date || ''} • {duplicateMatch.amount || ''}</div>}
             <div className="scanner-meta">
               <span className="meta-pill">Confidence <strong>{Math.round(Number(result.confidence?.overall || 0) * 100)}%</strong></span>
               {result.merchant_memory && <span className="meta-pill">Merchant memory <strong>Matched</strong></span>}
@@ -357,7 +353,7 @@ export default function ReceiptScannerModal({
             {!result.date && <div className="alert warning">No reliable date was found in the receipt. Please enter the receipt date manually rather than using today's date.</div>}
             <div className="scanner-actions">
               <button type="button" onClick={retake} className="button ghost"><RotateCcw size={17} /> Retake</button>
-              <button type="button" onClick={confirmExpense} disabled={saving} className="button primary"><CheckCircle2 size={18} /> {saving ? 'Creating Expenseâ€¦' : 'Confirm & Create Expense'}</button>
+              <button type="button" onClick={confirmExpense} disabled={saving} className="button primary"><CheckCircle2 size={18} /> {saving ? 'Creating Expense…' : 'Confirm & Create Expense'}</button>
             </div>
           </div>
         )}

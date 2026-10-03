@@ -7,6 +7,26 @@ import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Local development keeps its variables in backend/.env. Production gets them
+# from the platform environment, so the file is optional and never overrides a
+# variable that the platform already set.
+_env_file = BASE_DIR / ".env"
+if _env_file.is_file():
+    try:
+        for _line in _env_file.read_text(encoding="utf-8").splitlines():
+            _line = _line.strip()
+            if not _line or _line.startswith("#") or "=" not in _line:
+                continue
+            _key, _, _value = _line.partition("=")
+            _key = _key.strip()
+            if _key and not _key.isidentifier() and _key.upper() != _key:
+                continue
+            os.environ.setdefault(_key, _value.strip().strip('"').strip("'"))
+    except Exception:
+        # A malformed env file must never take the whole app down; the process
+        # environment still works.
+        pass
+
 DEBUG = os.getenv("DEBUG", "False").lower() in {"1", "true", "yes", "on"}
 _secret_from_env = os.getenv("SECRET_KEY", "").strip()
 SECRET_KEY = _secret_from_env or ("django-insecure-local-development-only" if DEBUG else secrets.token_urlsafe(64))

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Sparkles, Wand2, X } from 'lucide-react';
 import { predictCategoryDebounced } from '../services/ai';
 
@@ -16,29 +16,37 @@ import { predictCategoryDebounced } from '../services/ai';
  */
 export default function CategorySuggestion({ title, enabled = true, extraParams = {}, onSelect, currentCategory }) {
   const [result, setResult] = useState(null);
+  // ``loading`` is derived from the request round-trip: the effect sets a
+  // marker when it dispatches a prediction and the callback clears it. Keeping
+  // it as state (rather than setting it from inside the effect body) means the
+  // render reflects the answer as soon as it arrives.
   const [loading, setLoading] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
-  const requestRef = useRef(0);
+  // Dismissal is keyed to the title that was dismissed, so a new keystroke
+  // naturally re-offers the suggestion without an extra state-driven render.
+  const [dismissedFor, setDismissedFor] = useState(null);
+  const dismissed = dismissedFor === title;
 
   useEffect(() => {
-    setDismissed(false);
     if (!enabled || !title || !title.trim()) {
       setResult(null);
-      setLoading(false);
       return undefined;
     }
+    const params = { title, ...extraParams };
+    // A per-run flag is all the cancellation this needs: when the effect tears
+    // down (new keystroke, unmount) the flag flips and any in-flight callback is
+    // ignored instead of writing a stale suggestion into the form.
+    let finished = false;
     setLoading(true);
-    const token = ++requestRef.current;
-    const cancel = predictCategoryDebounced({ title, ...extraParams }, (data) => {
-      if (token !== requestRef.current) return;
+    const cancel = predictCategoryDebounced(params, (data) => {
+      finished = true;
       setLoading(false);
       setResult(data);
     });
     return () => {
       cancel();
-      if (requestRef.current === token) setLoading(false);
+      if (!finished) setLoading(false);
     };
-  }, [title, enabled, JSON.stringify(extraParams)]);
+  }, [enabled, title, extraParams]);
 
   const candidates = Array.isArray(result?.candidates) && result.candidates.length
     ? result.candidates
@@ -65,7 +73,7 @@ export default function CategorySuggestion({ title, enabled = true, extraParams 
           )}
         </span>
         {!loading && (
-          <button type="button" className="icon-button tiny" onClick={() => setDismissed(true)} aria-label="Dismiss suggestion" title="Dismiss">
+          <button type="button" className="icon-button tiny" onClick={() => setDismissedFor(title)} aria-label="Dismiss suggestion" title="Dismiss">
             <X size={14} />
           </button>
         )}
