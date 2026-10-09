@@ -31,21 +31,18 @@ probability of each word given that category, then picks the argmax. The
 returned confidence is the model's posterior, so the UI can stay quiet when it
 is unsure and only suggest when it is genuinely better than a human guess.
 
-Persistence
------------
-The trained tables are pickled into ``ai_models/<user_id>.pkl`` under MEDIA_ROOT
-and reloaded lazily, so a restart keeps everything the user taught the app.
+Persistence and consistency
+---------------------------
+PostgreSQL transaction history is the source of truth. The compact model is
+rebuilt from confirmed history for inference, so all Gunicorn workers observe
+the same data and cannot overwrite one another with stale process-local files.
 """
 
 import math
-import os
-import pickle
 import re
-import threading
 from collections import defaultdict
 from decimal import Decimal
 
-from django.conf import settings
 from django.utils import timezone
 
 WORD_RE = re.compile(r"[a-z0-9]+")
@@ -318,114 +315,8 @@ class UserModel:
         self.anomaly.untrain(category, amount)
 
 
-_ENGINE_LOCK = threading.RLock()
-_ENGINES = {}
-
-# Schema version stamped into every persisted payload. If an older payload is
-# found on disk (or one from a different model shape), it is discarded and the
-# model rebuilds from the user's transaction history instead of being loaded.
-MODEL_SCHEMA_VERSION = 3
-
-
-def _model_path(user_id):
-    base = os.path.join(settings.MEDIA_ROOT, "ai_models")
-    os.makedirs(base, exist_ok=True)
-    return os.path.join(base, f"{user_id}.pkl")
-
-
-def get_user_model(user_id):
-    """Load (or create) a user's persisted model. Cached per process."""
-    if user_id is None:
-        return UserModel()
-    with _ENGINE_LOCK:
-        model = _ENGINES.get(user_id)
-        if model is not None:
-            return model
-        model = UserModel()
-        try:
-            with open(_model_path(user_id), "rb") as handle:
-                payload = pickle.load(handle)
-            if not isinstance(payload, dict) or payload.get("schema") != MODEL_SCHEMA_VERSION:
-                # Unknown or stale payload — start empty rather than misinterpret it.
-                payload = None
-            else:
-                model.classifier.category_word_counts = defaultdict(
-                    lambda: defaultdict(int), payload.get("word_counts", {})
-                )
-                model.classifier.category_total_words = defaultdict(
-                    int, payload.get("total_words", {})
-                )
-                model.classifier.category_doc_counts = defaultdict(
-                    int, payload.get("doc_counts", {})
-                )
-                model.classifier.vocabulary = set(payload.get("vocabulary", ()))
-                model.anomaly.stats = defaultdict(
-                    lambda: [0.0, 0.0, 0], payload.get("anomaly", {})
-                )
-        except FileNotFoundError:
-            payload = None
-        except Exception:
-            # A corrupt model file must never break the app; retrain from scratch.
-            payload = None
-            model = UserModel()
-        if payload is None:
-            # Nothing usable on disk (first run, schema change or corruption).
-            # Rebuild from history so the model is not empty on a fresh process.
-            try:
-                from django.contrib.auth.models import User
-
-                user = User.objects.filter(pk=user_id).only("id").first()
-                if user is not None:
-                    with _ENGINE_LOCK:
-                        _ENGINES[user_id] = model
-                    _rebuild_from_history_into(user, model)
-                    return model
-            except Exception:
-                pass
-        _ENGINES[user_id] = model
-        return model
-
-
-def save_user_model(user_id, model):
-    """Persist a user's model atomically.
-
-    The write goes to a temporary file and is then replaced with ``os.replace``.
-    Under multiple gunicorn workers this means a reader either gets the
-    previous complete payload or the new one — never a half-written file.
-    """
-    if user_id is None:
-        return
-    with _ENGINE_LOCK:
-        path = _model_path(user_id)
-        try:
-            import tempfile
-
-            directory = os.path.dirname(path)
-            with tempfile.NamedTemporaryFile(
-                mode="wb", delete=False, dir=directory, prefix=".ai-", suffix=".tmp"
-            ) as handle:
-                tmp_path = handle.name
-                pickle.dump(
-                    {
-                        "schema": MODEL_SCHEMA_VERSION,
-                        "word_counts": dict(model.classifier.category_word_counts),
-                        "total_words": dict(model.classifier.category_total_words),
-                        "doc_counts": dict(model.classifier.category_doc_counts),
-                        "vocabulary": list(model.classifier.vocabulary),
-                        "anomaly": dict(model.anomaly.stats),
-                    },
-                    handle,
-                )
-            os.replace(tmp_path, path)
-        except Exception:
-            try:
-                os.unlink(tmp_path)
-            except (OSError, UnboundLocalError, NameError):
-                pass
-
-
 def _rebuild_from_history_into(user, model):
-    """Train ``model`` in place from the user's transaction history."""
+    """Train a fresh model from the authoritative transaction history."""
     from .models import Expense
 
     model.classifier = CategoryClassifier()
@@ -437,39 +328,37 @@ def _rebuild_from_history_into(user, model):
     )
     for title, notes, category, amount in expenses:
         model.train(title, notes, category, amount)
-    save_user_model(user.pk, model)
-
-
-def retrain_from_history(user):
-    """Rebuild a user's model from scratch using their full transaction history."""
-    from .models import Expense
-
-    model = UserModel()
-    expenses = (
-        Expense.objects.filter(user=user)
-        .exclude(transaction_type="TRANSFER")
-        .values_list("title", "notes", "category", "amount")
-    )
-    for title, notes, category, amount in expenses:
-        model.train(title, notes, category, amount)
-    with _ENGINE_LOCK:
-        _ENGINES[user.pk] = model
-    save_user_model(user.pk, model)
     return model
 
 
+def get_user_model(user_id):
+    """Build from PostgreSQL so multiple workers cannot serve stale model files."""
+    if user_id is None:
+        return UserModel()
+    from django.contrib.auth.models import User
+    user = User.objects.filter(pk=user_id).only("id").first()
+    if user is None:
+        return UserModel()
+    return _rebuild_from_history_into(user, UserModel())
+
+
+def save_user_model(user_id, model):
+    """Compatibility no-op: persisted transaction rows are the model state."""
+    return None
+
+
+def retrain_from_history(user):
+    return _rebuild_from_history_into(user, UserModel())
+
+
 def train_transaction(user, title, notes, category, amount):
-    """Incremental training hook called after a transaction is confirmed."""
-    model = get_user_model(user.pk)
-    model.train(title, notes, category, amount)
-    save_user_model(user.pk, model)
+    """The saved transaction is already the authoritative training row."""
+    return None
 
 
 def retrain_transaction(user, old_title, old_notes, old_category, old_amount):
-    """Remove a stale training record (used on edit/category correction)."""
-    model = get_user_model(user.pk)
-    model.untrain(old_title, old_notes, old_category, old_amount)
-    save_user_model(user.pk, model)
+    """Edits are reflected automatically on the next model rebuild."""
+    return None
 
 
 def predict_category(user, title, notes="", top_k=0):

@@ -86,19 +86,37 @@ def advance_date(value, frequency, interval=1):
 
 
 def process_due_recurring(user, today=None, max_runs=100):
+    """Create due recurring rows exactly once even when schedulers overlap."""
     today = today or timezone.localdate()
     created = []
-    rules = RecurringRule.objects.filter(user=user, active=True, next_run__lte=today).order_by("next_run", "id")
-    for rule in rules:
-        runs = 0
-        while rule.active and rule.next_run <= today and runs < max_runs:
-            if rule.end_date and rule.next_run > rule.end_date:
-                rule.active = False
-                break
-            account = rule.account
-            with transaction.atomic():
-                if account:
-                    account = Account.objects.select_for_update().filter(pk=account.pk, user=user).first()
+    rule_ids = list(
+        RecurringRule.objects.filter(user=user, active=True, next_run__lte=today)
+        .order_by("next_run", "id")
+        .values_list("id", flat=True)
+    )
+
+    for rule_id in rule_ids:
+        with transaction.atomic():
+            rule = (
+                RecurringRule.objects.select_for_update()
+                .select_related("account")
+                .filter(pk=rule_id, user=user, active=True, next_run__lte=today)
+                .first()
+            )
+            if not rule:
+                continue
+
+            runs = 0
+            while rule.active and rule.next_run <= today and runs < max_runs:
+                if rule.end_date and rule.next_run > rule.end_date:
+                    rule.active = False
+                    break
+
+                scheduled_for = rule.next_run
+                account = None
+                if rule.account_id:
+                    account = Account.objects.select_for_update().filter(pk=rule.account_id, user=user).first()
+
                 expense = Expense.objects.create(
                     user=user,
                     account=account,
@@ -107,32 +125,34 @@ def process_due_recurring(user, today=None, max_runs=100):
                     transaction_type=rule.transaction_type,
                     category=rule.category,
                     payment_method=rule.payment_method,
-                    date=rule.next_run,
+                    date=scheduled_for,
                     notes=(rule.notes or "Recurring transaction").strip(),
                     is_recurring=True,
                 )
                 if account:
                     account.balance = safe_decimal(account.balance) + balance_delta(rule.transaction_type, rule.amount)
                     account.save(update_fields=["balance"])
-            created.append(expense.id)
-            rule.last_run = rule.next_run
-            rule.next_run = advance_date(rule.next_run, rule.frequency, rule.interval)
-            runs += 1
-            if rule.end_date and rule.next_run > rule.end_date:
-                rule.active = False
-        rule.save(update_fields=["last_run", "next_run", "active", "updated_at"])
-        if runs:
-            AppNotification.objects.get_or_create(
-                user=user,
-                dedupe_key=f"recurring:{rule.id}:{rule.last_run}",
-                defaults={
-                    "kind": "RECURRING",
-                    "title": f"Recurring {rule.transaction_type.lower()} added",
-                    "message": f"{rule.title} was added automatically.",
-                    "due_date": rule.last_run,
-                    "action_url": "/transactions",
-                },
-            )
+
+                created.append(expense.id)
+                rule.last_run = scheduled_for
+                rule.next_run = advance_date(scheduled_for, rule.frequency, rule.interval)
+                runs += 1
+                if rule.end_date and rule.next_run > rule.end_date:
+                    rule.active = False
+
+            rule.save(update_fields=["last_run", "next_run", "active", "updated_at"])
+            if runs:
+                AppNotification.objects.get_or_create(
+                    user=user,
+                    dedupe_key=f"recurring:{rule.id}:{rule.last_run}",
+                    defaults={
+                        "kind": "RECURRING",
+                        "title": f"Recurring {rule.transaction_type.lower()} added",
+                        "message": f"{rule.title} was added automatically.",
+                        "due_date": rule.last_run,
+                        "action_url": "/transactions",
+                    },
+                )
     return created
 
 

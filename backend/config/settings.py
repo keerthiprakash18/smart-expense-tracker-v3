@@ -1,5 +1,4 @@
 import os
-import secrets
 from datetime import timedelta
 from pathlib import Path
 
@@ -29,7 +28,9 @@ if _env_file.is_file():
 
 DEBUG = os.getenv("DEBUG", "False").lower() in {"1", "true", "yes", "on"}
 _secret_from_env = os.getenv("SECRET_KEY", "").strip()
-SECRET_KEY = _secret_from_env or ("django-insecure-local-development-only" if DEBUG else secrets.token_urlsafe(64))
+if not DEBUG and not _secret_from_env:
+    raise RuntimeError("SECRET_KEY is required in production. Refusing to start with an ephemeral signing key.")
+SECRET_KEY = _secret_from_env or "django-insecure-local-development-only"
 SECRET_KEY_CONFIGURED = bool(_secret_from_env)
 
 
@@ -222,9 +223,13 @@ SIMPLE_JWT = {
     "CHECK_REVOKE_TOKEN": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
+JWT_REFRESH_COOKIE_NAME = os.getenv("JWT_REFRESH_COOKIE_NAME", "smart_expense_refresh")
+JWT_COOKIE_SECURE = env_bool("JWT_COOKIE_SECURE", not DEBUG)
+JWT_COOKIE_SAMESITE = os.getenv("JWT_COOKIE_SAMESITE", "None" if not DEBUG else "Lax")
+JWT_COOKIE_PATH = "/api/"
 
 # Strict production CORS. The old allow-all environment flag is ignored outside DEBUG.
-CORS_ALLOW_CREDENTIALS = False
+CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOWED_ORIGINS = sorted(set(
     env_list("CORS_ALLOWED_ORIGINS")

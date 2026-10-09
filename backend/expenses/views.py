@@ -49,6 +49,7 @@ class ExpensePagination(PageNumberPagination):
 
 
 from .models import Account, Bill, DebtPayment, Expense, MerchantRule, MoneyDebt, SavingsGoal, UserProfile
+from .querying import filtered_expenses
 from .ocr_service import IndiaReceiptExtractor
 from .security_utils import normalize_merchant
 from .serializers import (
@@ -361,20 +362,7 @@ class ExpenseListCreateView(generics.ListCreateAPIView):
     pagination_class = ExpensePagination
 
     def get_queryset(self):
-        qs = Expense.objects.filter(user=self.request.user).select_related("account")
-        tx_type = self.request.query_params.get("transaction_type")
-        category = self.request.query_params.get("category")
-        start_date = self.request.query_params.get("start_date")
-        end_date = self.request.query_params.get("end_date")
-        if tx_type:
-            qs = qs.filter(transaction_type=tx_type.upper())
-        if category:
-            qs = qs.filter(category__iexact=category)
-        if start_date:
-            qs = qs.filter(date__gte=start_date)
-        if end_date:
-            qs = qs.filter(date__lte=end_date)
-        return qs.order_by("-date", "-id")
+        return filtered_expenses(self.request.user, self.request.query_params)
 
     def create(self, request, *args, **kwargs):
         data = request.data.copy()

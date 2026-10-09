@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .analytics_views import AnalyticsSummaryView, TransactionCsvExportView
 from .views import (
     AccountDetailView, AccountListCreateView, BillDetailView, BillListCreateView,
     ChangePasswordView, DashboardSummaryView, DebtPaymentListCreateView, DeleteAccountView,
@@ -42,6 +43,8 @@ urlpatterns = [
     path("money-debts/<int:debt_id>/payments/", DebtPaymentListCreateView.as_view(), name="debt-payment-list-create"),
     path("dashboard/", DashboardSummaryView.as_view(), name="dashboard-summary"),
     path("scan-receipt/", ReceiptScanView.as_view(), name="scan-receipt"),
+    path("v3/analytics/summary/", AnalyticsSummaryView.as_view(), name="v3-analytics-summary"),
+    path("v3/transactions/export.csv/", TransactionCsvExportView.as_view(), name="v3-transactions-export"),
 
     # V3 finance engine
     path("v3/categories/", CategoryListCreateView.as_view(), name="v3-category-list"),
