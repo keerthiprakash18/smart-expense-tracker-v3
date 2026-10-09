@@ -2,13 +2,14 @@ from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.conf import settings
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 from datetime import timedelta
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import Account, Bill, Expense, MoneyDebt, SavingsGoal, SecurityCode, UserProfile
+from .models import Account, Bill, Expense, MoneyDebt, RecurringRule, SavingsGoal, SecurityCode, UserProfile
 from .security_utils import totp_code
 
 
@@ -393,11 +394,78 @@ class ProductionSecurityTests(APITestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_logout_blacklists_refresh_token(self):
-        tokens = self._auth()
-        response = self.client.post(reverse("logout"), {"refresh": tokens["refresh"]}, format="json")
+        self._auth()
+        cookie_name = settings.JWT_REFRESH_COOKIE_NAME
+        refresh = self.client.cookies[cookie_name].value
+        response = self.client.post(reverse("logout"), {}, format="json", HTTP_X_REQUESTED_WITH="XMLHttpRequest")
         self.assertEqual(response.status_code, 200)
         self.client.credentials()
-        self.assertEqual(self.client.post(reverse("token_refresh"), {"refresh": tokens["refresh"]}, format="json").status_code, 401)
+        self.assertEqual(self.client.post(reverse("token_refresh"), {"refresh": refresh}, format="json").status_code, 401)
+
+    def test_deleted_user_refresh_returns_401_not_500(self):
+        self._auth()
+        refresh = self.client.cookies[settings.JWT_REFRESH_COOKIE_NAME].value
+        User.objects.filter(username=self.username).delete()
+        self.client.cookies.clear()
+        response = self.client.post(reverse("token_refresh"), {"refresh": refresh}, format="json")
+        self.assertEqual(response.status_code, 401)
+
+    def test_duplicate_category_budget_returns_validation_400(self):
+        self._auth()
+        payload = {"category": "Food & Dining", "amount": "5000.00", "period": "MONTHLY", "active": True}
+        first = self.client.post(reverse("v3-budget-list"), payload, format="json")
+        second = self.client.post(reverse("v3-budget-list"), payload, format="json")
+        self.assertEqual(first.status_code, 201, first.data)
+        self.assertEqual(second.status_code, 400, second.data)
+
+    def test_analytics_uses_full_ledger_beyond_first_page(self):
+        self._auth()
+        user = User.objects.get(username=self.username)
+        account = Account.objects.filter(user=user).first()
+        for i in range(60):
+            Expense.objects.create(
+                user=user, account=account, title=f"Expense {i}", amount=Decimal("10.00"),
+                transaction_type="EXPENSE", category="Testing", payment_method="UPI",
+                date=timezone.localdate(),
+            )
+        response = self.client.get(reverse("v3-analytics-summary"))
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["month"]["spend"], 600.0)
+        self.assertEqual(response.data["totals"]["transaction_count"], 60)
+
+    def test_server_search_and_csv_export_cover_full_ledger(self):
+        self._auth()
+        user = User.objects.get(username=self.username)
+        account = Account.objects.filter(user=user).first()
+        for i in range(60):
+            Expense.objects.create(
+                user=user, account=account,
+                title="Needle Merchant" if i == 59 else f"Ordinary {i}",
+                amount=Decimal("1.00"), transaction_type="EXPENSE",
+                category="Testing", payment_method="UPI", date=timezone.localdate(),
+            )
+        search = self.client.get(reverse("expense-list-create"), {"search": "Needle Merchant"})
+        self.assertEqual(search.status_code, 200, search.data)
+        self.assertEqual(search.data["count"], 1)
+        export = self.client.get(reverse("v3-transactions-export"), {"search": "Needle Merchant"})
+        self.assertEqual(export.status_code, 200)
+        self.assertIn(b"Needle Merchant", export.content)
+
+    def test_recurring_processing_is_idempotent_after_next_run_advances(self):
+        self._auth()
+        user = User.objects.get(username=self.username)
+        account = Account.objects.filter(user=user).first()
+        RecurringRule.objects.create(
+            user=user, account=account, title="Monthly Test", amount=Decimal("100.00"),
+            transaction_type="EXPENSE", category="Testing", payment_method="UPI",
+            frequency="MONTHLY", interval=1, next_run=timezone.localdate(), active=True,
+        )
+        from .v3_views import process_due_recurring
+        first = process_due_recurring(user)
+        second = process_due_recurring(user)
+        self.assertEqual(len(first), 1)
+        self.assertEqual(second, [])
+        self.assertEqual(Expense.objects.filter(user=user, title="Monthly Test").count(), 1)
 
 
     def test_recovery_code_can_reset_password_once(self):

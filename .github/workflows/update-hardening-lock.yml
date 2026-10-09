@@ -1,0 +1,37 @@
+name: Update hardening package lock
+
+on:
+  push:
+    branches: [production-hardening-2026-10-09]
+    paths:
+      - frontend/package.json
+      - .github/workflows/update-hardening-lock.yml
+
+permissions:
+  contents: write
+
+jobs:
+  lock:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: production-hardening-2026-10-09
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm install --package-lock-only --ignore-scripts
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfile already current"
+          else
+            git commit -m "Update frontend lockfile for hardening tests"
+            git push
+          fi
