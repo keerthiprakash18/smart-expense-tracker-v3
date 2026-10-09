@@ -1,6 +1,7 @@
 import axios from "axios";
+import { Capacitor } from "@capacitor/core";
 
-const AUTH_STORAGE_VERSION = "2026-09-22-reset-v2";
+const AUTH_STORAGE_VERSION = "2026-10-09-cookie-refresh-v1";
 const storedAuthVersion = localStorage.getItem("smart_expense_auth_version");
 if (storedAuthVersion !== AUTH_STORAGE_VERSION) {
   localStorage.removeItem("access_token");
@@ -9,26 +10,25 @@ if (storedAuthVersion !== AUTH_STORAGE_VERSION) {
 }
 
 const configuredBaseUrl = (import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
+const nativeFallback = "https://smart-expense-tracker-v3-production.up.railway.app";
 
-// Development uses Vite's /api proxy when VITE_API_URL is omitted.
-// Production/Capacitor should set VITE_API_URL at build time; Railway is the safe fallback.
-export const API_BASE_URL =
-  configuredBaseUrl ||
-  (import.meta.env.DEV ? "" : "https://smart-expense-tracker-v3-production.up.railway.app");
+// Web production stays same-origin through Vercel rewrites so the HttpOnly
+// refresh cookie is first-party. Native Capacitor builds use VITE_API_URL.
+export const API_BASE_URL = Capacitor.isNativePlatform()
+  ? (configuredBaseUrl || nativeFallback)
+  : (import.meta.env.DEV ? configuredBaseUrl : "");
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 90000,
+  withCredentials: true,
+  headers: { "X-Requested-With": "XMLHttpRequest" },
 });
 
 export const getAccessToken = () => localStorage.getItem("access_token");
-export const getRefreshToken = () => localStorage.getItem("refresh_token");
-
-export const setTokens = (accessToken, refreshToken = null) => {
+export const setTokens = (accessToken) => {
   if (accessToken) localStorage.setItem("access_token", accessToken);
-  if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
 };
-
 export const clearTokens = () => {
   localStorage.removeItem("access_token");
   localStorage.removeItem("refresh_token");
@@ -43,34 +43,29 @@ api.interceptors.request.use((config) => {
   const token = getAccessToken();
   config.headers = config.headers || {};
   if (token) config.headers.Authorization = `Bearer ${token}`;
-
-  // Let Axios/browser generate the multipart boundary.
-  if (config.data instanceof FormData) {
-    delete config.headers["Content-Type"];
-  }
+  config.headers["X-Requested-With"] = "XMLHttpRequest";
+  if (config.data instanceof FormData) delete config.headers["Content-Type"];
   return config;
 });
 
 let refreshPromise = null;
 
-const refreshAccessToken = async () => {
-  const refresh = getRefreshToken();
-  if (!refresh) throw new Error("No refresh token available");
-
+export const refreshAccessToken = async () => {
   if (!refreshPromise) {
     refreshPromise = axios
-      .post(`${API_BASE_URL}/api/token/refresh/`, { refresh }, { timeout: 30000 })
+      .post(`${API_BASE_URL}/api/token/refresh/`, {}, {
+        timeout: 30000,
+        withCredentials: true,
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      })
       .then((response) => {
         const access = response.data?.access;
         if (!access) throw new Error("Refresh response did not include an access token");
-        setTokens(access, response.data?.refresh || refresh);
+        setTokens(access);
         return access;
       })
-      .finally(() => {
-        refreshPromise = null;
-      });
+      .finally(() => { refreshPromise = null; });
   }
-
   return refreshPromise;
 };
 
@@ -79,16 +74,10 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     const url = String(originalRequest?.url || "");
-    const isAuthEndpoint = url.includes("/api/token/");
+    const isLogin = url.includes("/api/token/") && !url.includes("/api/token/refresh/");
     const isRefreshCall = url.includes("/api/token/refresh/");
 
-    if (
-      error.response?.status === 401 &&
-      originalRequest &&
-      !originalRequest._retry &&
-      !isAuthEndpoint &&
-      getRefreshToken()
-    ) {
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry && !isLogin && !isRefreshCall) {
       originalRequest._retry = true;
       try {
         const access = await refreshAccessToken();
@@ -101,13 +90,7 @@ api.interceptors.response.use(
       }
     }
 
-    // A 401 from any other authenticated endpoint (and nothing left to refresh
-    // with) means the session is gone — surface the expiry instead of looping
-    // back into a refresh attempt that cannot succeed.
-    if (error.response?.status === 401 && !isAuthEndpoint && !isRefreshCall) {
-      notifyAuthExpired();
-    }
-
+    if (error.response?.status === 401 && isRefreshCall) notifyAuthExpired();
     return Promise.reject(error);
   }
 );

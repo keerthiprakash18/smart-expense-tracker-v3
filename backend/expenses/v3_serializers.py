@@ -51,6 +51,18 @@ class CategoryBudgetSerializer(UserOwnedSerializerMixin, serializers.ModelSerial
         fields = ["id", "category", "amount", "period", "active", "spent", "percent", "created_at", "updated_at"]
         read_only_fields = ["id", "spent", "percent", "created_at", "updated_at"]
 
+    def validate(self, attrs):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            category = str(attrs.get("category", getattr(self.instance, "category", "")) or "").strip()
+            period = attrs.get("period", getattr(self.instance, "period", "MONTHLY"))
+            qs = CategoryBudget.objects.filter(user=request.user, category=category, period=period)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError({"category": "A budget for this category and period already exists."})
+        return attrs
+
     def _spent(self, obj):
         request = self.context.get("request")
         if not request:

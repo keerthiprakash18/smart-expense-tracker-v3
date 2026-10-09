@@ -1,41 +1,62 @@
+from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
-from rest_framework import status
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework import serializers, status
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenRefreshView
 
 from .models import SecuritySettings
 from .security_utils import consume_recovery_code, verify_totp
 
 
+def _refresh_cookie_name():
+    return getattr(settings, "JWT_REFRESH_COOKIE_NAME", "smart_expense_refresh")
+
+
+def _set_refresh_cookie(response, token):
+    response.set_cookie(
+        _refresh_cookie_name(),
+        str(token),
+        max_age=int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()),
+        httponly=True,
+        secure=getattr(settings, "JWT_COOKIE_SECURE", not settings.DEBUG),
+        samesite=getattr(settings, "JWT_COOKIE_SAMESITE", "None" if not settings.DEBUG else "Lax"),
+        path=getattr(settings, "JWT_COOKIE_PATH", "/api/"),
+    )
+
+
+def _clear_refresh_cookie(response):
+    response.delete_cookie(
+        _refresh_cookie_name(),
+        path=getattr(settings, "JWT_COOKIE_PATH", "/api/"),
+        samesite=getattr(settings, "JWT_COOKIE_SAMESITE", "None" if not settings.DEBUG else "Lax"),
+    )
+
+
+def _refresh_from_request(request):
+    return str(request.COOKIES.get(_refresh_cookie_name()) or request.data.get("refresh") or "").strip()
+
+
+def _require_xhr_for_cookie(request):
+    if request.COOKIES.get(_refresh_cookie_name()) and request.headers.get("X-Requested-With") != "XMLHttpRequest":
+        return Response({"detail": "Invalid refresh request."}, status=status.HTTP_403_FORBIDDEN)
+    return None
+
+
 class LoginRateThrottle(ScopedRateThrottle):
-    """Rate-limits login by account, not just by IP.
-
-    A pure IP bucket is too blunt: every user on a shared office NAT or a
-    mobile carrier shares one bucket, so a handful of legitimate sign-ins can
-    lock each other out. We scope the bucket to ``<account>:<client ip>``,
-    which is also strictly better brute-force protection — an attacker is
-    confined to the victim's bucket instead of a shared one. Requests that
-    name an unknown account fall back to the IP-only bucket, so a probing
-    scan still pays the cost.
-    """
-
     scope = "login"
 
     def get_cache_key(self, request, view):
         ident = self.get_ident(request)
         try:
             from django.utils.http import quote_etag
-        except ImportError:  # pragma: no cover - Django < 5.0 shim
+        except ImportError:
             quote_etag = lambda value: value  # noqa: E731
-
-        # ``request.data`` parses the request body, which can raise if a prior
-        # consumer already read ``request.body`` raw. Throttling must never turn
-        # a parse problem into a 500, so fall back to the IP-only bucket.
         try:
             identifier = str(request.data.get("username") or request.data.get("email") or "").strip()
         except Exception:
@@ -71,27 +92,57 @@ class LoginView(APIView):
                 return Response({"two_factor_required": True, "detail": "Invalid authenticator or recovery code."}, status=status.HTTP_401_UNAUTHORIZED)
 
         refresh = RefreshToken.for_user(authenticated)
-        return Response({"refresh": str(refresh), "access": str(refresh.access_token)}, status=200)
+        response = Response({"access": str(refresh.access_token)}, status=200)
+        _set_refresh_cookie(response, refresh)
+        return response
 
 
-__all__ = ["LoginView", "LogoutView", "ThrottledTokenRefreshView"]
-
-
-
-class ThrottledTokenRefreshView(TokenRefreshView):
+class ThrottledTokenRefreshView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
     throttle_scope = "token_refresh"
+
+    def post(self, request):
+        rejected = _require_xhr_for_cookie(request)
+        if rejected:
+            return rejected
+        refresh_value = _refresh_from_request(request)
+        if not refresh_value:
+            response = Response({"detail": "Session expired."}, status=status.HTTP_401_UNAUTHORIZED)
+            _clear_refresh_cookie(response)
+            return response
+        serializer = TokenRefreshSerializer(data={"refresh": refresh_value})
+        try:
+            serializer.is_valid(raise_exception=True)
+        except (User.DoesNotExist, InvalidToken, TokenError, serializers.ValidationError):
+            response = Response({"detail": "Invalid or expired session."}, status=status.HTTP_401_UNAUTHORIZED)
+            _clear_refresh_cookie(response)
+            return response
+        data = serializer.validated_data
+        response = Response({"access": data["access"]}, status=200)
+        if data.get("refresh"):
+            _set_refresh_cookie(response, data["refresh"])
+        return response
 
 
 class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
+    authentication_classes = []
     throttle_scope = "security"
 
     def post(self, request):
-        refresh_value = str(request.data.get("refresh", "")).strip()
-        if not refresh_value:
-            return Response({"error": "Refresh token is required."}, status=400)
-        try:
-            RefreshToken(refresh_value).blacklist()
-        except Exception:
-            return Response({"error": "Invalid refresh token."}, status=400)
-        return Response({"message": "Signed out securely."})
+        rejected = _require_xhr_for_cookie(request)
+        if rejected:
+            return rejected
+        refresh_value = _refresh_from_request(request)
+        if refresh_value:
+            try:
+                RefreshToken(refresh_value).blacklist()
+            except Exception:
+                pass
+        response = Response({"message": "Signed out securely."})
+        _clear_refresh_cookie(response)
+        return response
+
+
+__all__ = ["LoginView", "LogoutView", "ThrottledTokenRefreshView"]

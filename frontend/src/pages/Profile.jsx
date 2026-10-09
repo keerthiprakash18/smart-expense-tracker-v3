@@ -228,7 +228,7 @@ function SecurityCenter({notify}) {
         <form className="modal-card" onMouseDown={e=>e.stopPropagation()} onSubmit={confirm2fa}>
           <div className="modal-head">
             <div><span>AUTHENTICATOR SETUP</span><h2>Enable two-factor authentication</h2></div>
-            <button type="button" className="icon-button" onClick={()=>setSetup(null)}>×</button>
+            <button type="button" className="icon-button" aria-label="Close dialog" onClick={()=>setSetup(null)}>×</button>
           </div>
 
           <div className="alert success">
@@ -295,7 +295,7 @@ function SecurityCenter({notify}) {
     {status.two_factor_enabled&&disableOpen&&
       <div className="modal-backdrop" onMouseDown={()=>setDisableForm({password:'',code:''})}>
         <form className="modal-card" onMouseDown={(e)=>e.stopPropagation()} onSubmit={disable2fa}>
-          <div className="modal-head"><div><span>DISABLE 2FA</span><h2>Turn off two-factor authentication</h2></div><button type="button" className="icon-button" onClick={()=>{setDisableForm({password:'',code:''});setDisableOpen(false)}}>×</button></div>
+          <div className="modal-head"><div><span>DISABLE 2FA</span><h2>Turn off two-factor authentication</h2></div><button type="button" className="icon-button" aria-label="Close dialog" onClick={()=>{setDisableForm({password:'',code:''});setDisableOpen(false)}}>×</button></div>
           <div className="settings-note"><ShieldCheck size={20}/><div><strong>Confirm your identity</strong><span>Enter your password plus a current authenticator code or a recovery code.</span></div></div>
           <label><span>Current password</span><input required type="password" value={disableForm.password} onChange={(e)=>setDisableForm((p)=>({...p,password:e.target.value}))} autoComplete="current-password"/></label>
           <label><span>Authenticator or recovery code</span><input required inputMode="text" value={disableForm.code} onChange={(e)=>setDisableForm((p)=>({...p,code:e.target.value}))} placeholder="123456 or ABCDE-FGHIJ" autoComplete="one-time-code"/></label>
