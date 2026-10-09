@@ -70,7 +70,7 @@ jobs:
           ls -lh artifacts/SmartExpenseTracker.apk
 
       - name: Upload Android APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: SmartExpenseTracker-Android
           path: artifacts/SmartExpenseTracker.apk
