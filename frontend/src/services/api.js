@@ -1,4 +1,5 @@
 import axios from "axios";
+import { Capacitor } from "@capacitor/core";
 
 const AUTH_STORAGE_VERSION = "2026-10-09-cookie-refresh-v1";
 const storedAuthVersion = localStorage.getItem("smart_expense_auth_version");
@@ -9,10 +10,13 @@ if (storedAuthVersion !== AUTH_STORAGE_VERSION) {
 }
 
 const configuredBaseUrl = (import.meta.env.VITE_API_URL || "").trim().replace(/\/$/, "");
+const nativeFallback = "https://smart-expense-tracker-v3-production.up.railway.app";
 
-export const API_BASE_URL =
-  configuredBaseUrl ||
-  (import.meta.env.DEV ? "" : "https://smart-expense-tracker-v3-production.up.railway.app");
+// Web production stays same-origin through Vercel rewrites so the HttpOnly
+// refresh cookie is first-party. Native Capacitor builds use VITE_API_URL.
+export const API_BASE_URL = Capacitor.isNativePlatform()
+  ? (configuredBaseUrl || nativeFallback)
+  : (import.meta.env.DEV ? configuredBaseUrl : "");
 
 const api = axios.create({
   baseURL: API_BASE_URL,
