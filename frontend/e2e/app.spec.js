@@ -51,7 +51,8 @@ test('overview uses server analytics and remains accessible',async({page})=>{
   await page.addInitScript(()=>localStorage.setItem('access_token','test-access-token'));
   await page.goto('/#/');
   await expect(page.getByText('This month spent')).toBeVisible();
-  const spendCard=page.locator('.metric-card').filter({hasText:'This month spent'});\n  await expect(spendCard.getByText(/12,000/)).toBeVisible();
+  const spendCard=page.locator('.metric-card').filter({hasText:'This month spent'});
+  await expect(spendCard.getByText(/12,000/)).toBeVisible();
   await assertA11y(page);
 });
 
