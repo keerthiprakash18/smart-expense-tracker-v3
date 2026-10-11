@@ -78,7 +78,7 @@ export default function Transactions() {
     }
   };
 
-  return <div className="page-stack">
+  return <div className="page-stack transactions-page">
     <PageHeader eyebrow="LEDGER" title="Transactions" description="Search, filter and manage your complete finance history." actions={<><button className="button ghost" onClick={exportCsv}><Download size={17}/> Export all matches</button><button className="button primary" onClick={()=>navigate('/add')}><Plus size={18}/> Add</button></>} />
     <Surface className="toolbar-surface"><div className="search-box"><Search size={18}/><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search merchant, category, account or notes…" aria-label="Search transactions"/></div><div className="filter-tabs"><Filter size={16}/>{['ALL','EXPENSE','INCOME','BILL'].map((item)=><button key={item} className={type===item?'active':''} onClick={()=>setType(item)}>{item === 'ALL' ? 'All' : item[0]+item.slice(1).toLowerCase()}</button>)}</div></Surface>
     <Surface>

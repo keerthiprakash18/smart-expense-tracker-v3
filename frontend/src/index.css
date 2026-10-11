@@ -429,3 +429,410 @@ body::before{
   .brand-wordmark strong{font-size:20px}.brand-wordmark span{font-size:7px}
   .auth-logo-wrap .brand-icon{width:72px;height:72px}.auth-logo-wrap .brand-wordmark strong{font-size:27px}
 }
+
+
+/* Mobile-first usability refresh — 2026-10-11 */
+@media (max-width: 650px) {
+  :root { --radius: 17px; }
+
+  body {
+    background: radial-gradient(circle at 90% 0%, rgba(var(--accent-rgb), .075), transparent 24%), var(--bg);
+  }
+
+  .topbar {
+    height: calc(56px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 12px 0;
+    gap: 7px;
+  }
+
+  .mobile-brand { min-width: 0; }
+  .mobile-brand .brand-lockup-component { gap: 7px; }
+  .mobile-brand .brand-icon { width: 32px !important; height: 32px !important; }
+  .mobile-brand .brand-wordmark strong { font-size: 14px; }
+  .theme-toggle,
+  .sync-button { display: none; }
+  .notification-button { margin-left: auto; }
+  .topbar .icon-button { width: 38px; height: 38px; border-radius: 12px; }
+
+  .page-wrap {
+    padding: 15px 12px calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .page-stack { gap: 12px; }
+
+  .page-header {
+    gap: 7px;
+    padding: 0 2px 2px;
+  }
+
+  .page-header .eyebrow { display: none; }
+
+  .page-header h1 {
+    margin: 0;
+    font-size: 24px;
+    line-height: 1.15;
+    letter-spacing: -.032em;
+  }
+
+  .page-header p {
+    max-width: none;
+    font-size: 11px;
+    line-height: 1.45;
+  }
+
+  .page-actions {
+    width: 100%;
+    gap: 8px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .page-actions::-webkit-scrollbar { display: none; }
+
+  .page-actions .button {
+    min-height: 40px;
+    flex: 0 0 auto;
+    padding: 0 12px;
+    border-radius: 12px;
+  }
+
+  .overview-page .page-header p,
+  .overview-page .page-actions,
+  .transactions-page .page-header p {
+    display: none;
+  }
+
+  .surface {
+    padding: 14px;
+    border-radius: 17px;
+    box-shadow: 0 12px 34px rgba(0,0,0,.18);
+  }
+
+  .section-heading {
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .section-heading h2 {
+    margin-top: 3px;
+    font-size: 16px;
+  }
+
+  .section-heading > div:first-child > span,
+  .micro-label {
+    font-size: 8px;
+    letter-spacing: .12em;
+  }
+
+  .metric-grid,
+  .metric-grid.three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .metric-card {
+    min-height: 106px;
+    padding: 12px;
+    border-radius: 16px;
+    box-shadow: 0 10px 28px rgba(0,0,0,.15);
+  }
+
+  .metric-top {
+    gap: 6px;
+    font-size: 7px;
+    line-height: 1.25;
+    letter-spacing: .045em;
+  }
+
+  .metric-icon {
+    width: 29px;
+    height: 29px;
+    border-radius: 10px;
+  }
+
+  .metric-icon svg { width: 15px; height: 15px; }
+
+  .metric-card > strong {
+    margin-top: 12px;
+    font-size: clamp(15px, 4.5vw, 20px);
+    line-height: 1.05;
+  }
+
+  .metric-card > small {
+    margin-top: 4px;
+    font-size: 8px;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .overview-grid { gap: 12px; }
+
+  .hero-balance .section-heading > strong {
+    font-size: 22px;
+  }
+
+  .budget-numbers {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 14px;
+  }
+
+  .budget-numbers div {
+    min-width: 0;
+    padding: 9px 7px;
+    border-radius: 11px;
+  }
+
+  .budget-numbers span {
+    font-size: 7px;
+    letter-spacing: .05em;
+  }
+
+  .budget-numbers strong {
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .budget-warning {
+    margin-top: 10px;
+    padding: 9px 10px;
+    font-size: 9px;
+  }
+
+  .spending-surface .donut-layout {
+    display: block;
+  }
+
+  .spending-surface .donut {
+    display: none;
+  }
+
+  .spending-surface .legend {
+    gap: 0;
+  }
+
+  .spending-surface .legend > div {
+    min-height: 40px;
+    grid-template-columns: 9px 1fr auto;
+    gap: 8px;
+    border-bottom: 1px solid var(--border);
+    font-size: 10px;
+  }
+
+  .spending-surface .legend > div:last-child { border-bottom: 0; }
+  .spending-surface .legend strong { font-size: 11px; }
+
+  .insight-grid,
+  .forecast-grid {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(238px, 82vw);
+    grid-template-columns: none;
+    gap: 9px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: inline mandatory;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+
+  .insight-grid::-webkit-scrollbar,
+  .forecast-grid::-webkit-scrollbar { display: none; }
+
+  .smart-insight,
+  .forecast-card {
+    scroll-snap-align: start;
+  }
+
+  .quick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .quick-card {
+    min-height: 70px;
+    padding: 10px;
+    border-radius: 15px;
+    gap: 9px;
+  }
+
+  .quick-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+  }
+
+  .quick-icon svg { width: 18px; height: 18px; }
+  .quick-card strong { font-size: 10px; }
+  .quick-card span { display: none; }
+
+  .recent-surface .transaction-row,
+  .transactions-page .transaction-row {
+    min-height: 62px;
+    gap: 9px;
+    padding: 8px 0;
+  }
+
+  .transaction-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+  }
+
+  .transaction-main strong { font-size: 11px; }
+  .transaction-main span {
+    margin-top: 3px;
+    font-size: 8px;
+  }
+
+  .amount { font-size: 10px; }
+
+  .toolbar-surface {
+    position: sticky;
+    top: calc(62px + env(safe-area-inset-top));
+    z-index: 25;
+    gap: 9px;
+    padding: 10px;
+    border-radius: 15px;
+    background: color-mix(in srgb, var(--panel-strong) 94%, transparent);
+    backdrop-filter: blur(18px);
+  }
+
+  .search-box {
+    height: 42px;
+    border-radius: 12px;
+    padding: 0 10px;
+  }
+
+  .search-box input { font-size: 10px; }
+
+  .filter-tabs {
+    gap: 6px;
+    padding-bottom: 1px;
+    scrollbar-width: none;
+  }
+
+  .filter-tabs::-webkit-scrollbar { display: none; }
+  .filter-tabs > svg { display: none; }
+
+  .filter-tabs button {
+    min-height: 34px;
+    padding: 0 11px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--panel-soft);
+    white-space: nowrap;
+  }
+
+  .filter-tabs button.active {
+    border-color: rgba(var(--accent-rgb), .25);
+    background: rgba(var(--accent-rgb), .12);
+  }
+
+  .list-summary {
+    padding: 0 1px 8px;
+  }
+
+  .list-summary strong { font-size: 10px; }
+  .list-summary span { display: none; }
+
+  .transactions-page .row-delete {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 auto;
+  }
+
+  .transactions-page .row-open { min-width: 0; }
+
+  .money-summary {
+    gap: 8px;
+  }
+
+  .money-summary > div {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .goal-grid,
+  .planner-card-grid,
+  .backup-grid {
+    gap: 10px;
+  }
+
+  .modal-backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .modal-card {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 24px 24px 0 0;
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .bottom-nav {
+    left: 8px;
+    right: 8px;
+    bottom: calc(7px + env(safe-area-inset-bottom));
+    min-height: 64px;
+    padding: 5px;
+    border-radius: 20px;
+  }
+
+  .bottom-nav a {
+    height: 50px;
+    gap: 3px;
+    border-radius: 13px;
+    font-size: 7px;
+  }
+
+  .bottom-nav a svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .bottom-add {
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+  }
+
+  .toast {
+    left: 12px;
+    right: 12px;
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    min-width: 0;
+    max-width: none;
+    text-align: center;
+  }
+}
+
+@media (max-width: 420px) {
+  .metric-grid,
+  .metric-grid.three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quick-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .page-wrap {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .metric-card {
+    min-height: 102px;
+    padding: 11px;
+  }
+
+  .metric-card > strong {
+    font-size: 16px;
+  }
+}
