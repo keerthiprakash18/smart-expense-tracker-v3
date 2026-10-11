@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
-const AUTH_VERSION='2026-10-09-cookie-refresh-v1';
+const AUTH_VERSION='2026-10-11-auth-routing-v2';
 const profile={username:'tester@example.com',name:'Test User',email:'tester@example.com',currency:'₹',monthly_budget:50000};
 const analytics={
   month:{income:50000,spend:12000,budget:50000,budget_percent:24,categories:[{name:'Food & Dining',value:7000},{name:'Travel',value:5000}]},
