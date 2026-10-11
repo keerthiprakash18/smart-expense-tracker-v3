@@ -1,7 +1,7 @@
 import axios from "axios";
 import { Capacitor } from "@capacitor/core";
 
-const AUTH_STORAGE_VERSION = "2026-10-09-cookie-refresh-v1";
+const AUTH_STORAGE_VERSION = "2026-10-11-auth-routing-v2";
 const storedAuthVersion = localStorage.getItem("smart_expense_auth_version");
 if (storedAuthVersion !== AUTH_STORAGE_VERSION) {
   localStorage.removeItem("access_token");
