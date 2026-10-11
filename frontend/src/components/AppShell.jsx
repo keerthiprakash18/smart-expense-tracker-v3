@@ -55,16 +55,16 @@ export default function AppShell() {
         <div className="topbar-spacer"/><span className="theme-chip">{selectedTheme.name}</span>
         <button className="icon-button theme-toggle" onClick={toggleMode} title={isLight?'Switch to dark mode':'Switch to light mode'} aria-label="Toggle color mode">{isLight?<Moon size={18}/>:<Sun size={18}/>}</button>
         <button className="icon-button notification-button" onClick={()=>navigate('/notifications')} title="Notifications" aria-label="Open notifications"><Bell size={18}/><i/></button>
-        <button className="icon-button" onClick={refresh} disabled={refreshing} title="Sync data" aria-label="Sync finance data"><RefreshCw className={refreshing?'spin':''} size={18}/></button>
+        <button className="icon-button sync-button" onClick={refresh} disabled={refreshing} title="Sync data" aria-label="Sync finance data"><RefreshCw className={refreshing?'spin':''} size={18}/></button>
         <button className="top-profile" onClick={()=>navigate('/profile')} aria-label="Open profile settings"><div className="avatar small">{(profile?.name||profile?.username||'U').slice(0,1).toUpperCase()}</div><span>{profile?.name||'Profile'}</span></button>
       </header>
       <div className="page-wrap" key={location.pathname}><Outlet /></div>
     </main>
     <nav className="bottom-nav" aria-label="Mobile primary">
-      <NavLink to="/" end><LayoutDashboard size={21}/><span>Overview</span></NavLink>
-      <NavLink to="/transactions"><WalletCards size={21}/><span>Transactions</span></NavLink>
+      <NavLink to="/" end><LayoutDashboard size={21}/><span>Home</span></NavLink>
+      <NavLink to="/transactions"><WalletCards size={21}/><span>History</span></NavLink>
       <button className="bottom-add" onClick={()=>navigate('/add')} aria-label="Add transaction"><Plus size={25}/></button>
-      <NavLink to="/planner"><WandSparkles size={21}/><span>Planner</span></NavLink>
+      <NavLink to="/planner"><WandSparkles size={21}/><span>Plan</span></NavLink>
       <NavLink to="/more"><MoreHorizontal size={21}/><span>More</span></NavLink>
     </nav>
     {toast&&<div className={`toast ${toast.type==='error'?'error':''}`} role="status">{toast.message}</div>}
