@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .assistant_service import AssistantError, execute_command, prepare_command, serialize_command
-from .models import AssistantCommand, AssistantProfile
+from .models import AssistantCommand, AssistantNote, AssistantProfile
 
 
 def serialize_profile(profile):
@@ -82,7 +82,10 @@ class AssistantMessageView(APIView):
             return Response({"error": "client_request_id must be a valid UUID."}, status=400)
 
         try:
-            command, created = prepare_command(request.user, message, request_id)
+            source = str(request.data.get("source") or "TEXT").upper()
+            if source not in {"TEXT", "VOICE_APP", "VOICE_WAKE"}:
+                source = "TEXT"
+            command, created = prepare_command(request.user, message, request_id, source=source)
             return Response(serialize_command(command), status=201 if created else 200)
         except AssistantError as exc:
             return Response({"error": str(exc)}, status=400)
@@ -131,3 +134,25 @@ class AssistantHistoryView(APIView):
     def get(self, request):
         commands = AssistantCommand.objects.filter(user=request.user).order_by("-created_at")[:20]
         return Response({"results": [serialize_command(item) for item in commands]})
+
+
+
+class AssistantNotesView(APIView):
+    permission_classes = [IsAuthenticated]
+    throttle_scope = "assistant"
+
+    def get(self, request):
+        notes = AssistantNote.objects.filter(user=request.user).order_by("-created_at")[:50]
+        return Response({
+            "results": [
+                {
+                    "id": note.id,
+                    "content": note.content,
+                    "source": note.source,
+                    "is_done": note.is_done,
+                    "reminder_at": note.reminder_at.isoformat() if note.reminder_at else None,
+                    "created_at": note.created_at.isoformat(),
+                }
+                for note in notes
+            ]
+        })
