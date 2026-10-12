@@ -46,7 +46,7 @@ jobs:
           java-version: "21"
 
       - name: Install Android SDK 36
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install frontend dependencies
         run: npm ci
