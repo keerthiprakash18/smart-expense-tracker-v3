@@ -6,6 +6,7 @@ from .assistant_views import (
     AssistantConfirmView,
     AssistantHistoryView,
     AssistantMessageView,
+    AssistantNotesView,
     AssistantSettingsView,
 )
 from .views import (
@@ -58,6 +59,7 @@ urlpatterns = [
     path("v3/assistant/commands/<int:command_id>/confirm/", AssistantConfirmView.as_view(), name="v3-assistant-confirm"),
     path("v3/assistant/commands/<int:command_id>/cancel/", AssistantCancelView.as_view(), name="v3-assistant-cancel"),
     path("v3/assistant/history/", AssistantHistoryView.as_view(), name="v3-assistant-history"),
+    path("v3/assistant/notes/", AssistantNotesView.as_view(), name="v3-assistant-notes"),
     path("v3/transactions/export.csv/", TransactionCsvExportView.as_view(), name="v3-transactions-export"),
 
     # V3 finance engine
