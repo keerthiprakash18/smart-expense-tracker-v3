@@ -17,6 +17,7 @@ const ReceiptVault = lazy(() => import('../pages/ReceiptVault'));
 const Notifications = lazy(() => import('../pages/Notifications'));
 const Legal = lazy(() => import('../pages/Legal'));
 const More = lazy(() => import('../pages/More'));
+const Assistant = lazy(() => import('../pages/Assistant'));
 
 function RouteLoader() {
   return <div className="boot-screen"><div className="boot-mark" />Loading Smart Expense…</div>;
@@ -46,6 +47,7 @@ export default function AppRouter() {
           <Route path="transactions/:id/edit" element={<TransactionEditor />} />
           <Route path="add" element={<TransactionEditor />} />
           <Route path="analytics" element={<Analytics />} />
+          <Route path="assistant" element={<Assistant />} />
           <Route path="money" element={<MoneyHub />} />
           <Route path="planner" element={<Planner />} />
           <Route path="receipts" element={<ReceiptVault />} />

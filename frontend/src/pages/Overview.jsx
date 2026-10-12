@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, BarChart3, Camera, CircleDollarSign, Plus, ReceiptText, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
+import { ArrowRight, BarChart3, Bot, Camera, CircleDollarSign, Plus, ReceiptText, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { useFinance } from '../context/FinanceContext';
 import api from '../services/api';
@@ -57,6 +57,7 @@ export default function Overview() {
     {insights.length > 0 && <Surface className="insights-surface"><div className="section-heading"><div><span>SMART INSIGHTS</span><h2>What changed</h2></div></div><div className="insight-grid">{insights.slice(0,4).map((item,i)=><div className="smart-insight" key={`${item.kind}-${i}`}><strong>{item.title}</strong><span>{item.message}</span></div>)}</div></Surface>}
     {forecast?.categories?.length > 0 && <Surface className="forecast-surface"><div className="section-heading"><div><span>AI FORECAST</span><h2>Where this month is heading</h2></div><span className="micro-label">{forecast.days_left} days left</span></div><div className="forecast-grid">{forecast.categories.slice(0,4).map((item)=><div className={`forecast-card${item.over_budget?' over':''}`} key={item.category}><div className="forecast-head"><strong>{item.category}</strong><span>{money(item.projected,symbol)} <em>projected</em></span></div><div className="forecast-bar"><i style={{width:`${Math.min(100,(Number(item.spent)/Math.max(1,Number(item.projected)))*100)}%`}}/></div><div className="forecast-meta"><span>{money(item.spent,symbol)} so far</span><span>{money(item.daily_rate,symbol)}/day</span></div>{item.message&&<div className="forecast-note">{item.message}</div>}</div>)}</div></Surface>}
     <section className="quick-grid">
+      <button className="quick-card assistant-quick-card" onClick={() => navigate('/assistant')}><div className="quick-icon"><Bot size={22}/></div><div><strong>Ask your AI assistant</strong><span>Speak or type expenses in Tamil, English or Tanglish</span></div><ArrowRight size={17}/></button>
       <button className="quick-card" onClick={() => navigate('/add')}><div className="quick-icon"><Plus size={22}/></div><div><strong>Add transaction</strong><span>Expense, income or bill</span></div><ArrowRight size={17}/></button>
       <button className="quick-card" onClick={() => navigate('/add?scan=1')}><div className="quick-icon"><Camera size={22}/></div><div><strong>Scan receipt</strong><span>OCR-powered extraction</span></div><ArrowRight size={17}/></button>
       <button className="quick-card" onClick={() => navigate('/money')}><div className="quick-icon"><CircleDollarSign size={22}/></div><div><strong>Money Hub</strong><span>Borrow, lend, bills & goals</span></div><ArrowRight size={17}/></button>

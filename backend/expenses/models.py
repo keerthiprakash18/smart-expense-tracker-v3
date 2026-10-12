@@ -423,3 +423,85 @@ class SecurityCode(models.Model):
 
     def __str__(self):
         return f"{self.user.username} {self.purpose}"
+
+
+
+# ============================================================
+# AI PERSONAL FINANCE ASSISTANT
+# ============================================================
+
+class AssistantProfile(models.Model):
+    LANGUAGE_CHOICES = [
+        ("AUTO", "Auto detect"),
+        ("EN", "English"),
+        ("TA", "Tamil"),
+    ]
+    PERSONALITY_CHOICES = [
+        ("FRIENDLY", "Friendly"),
+        ("PROFESSIONAL", "Professional"),
+        ("MINIMAL", "Minimal"),
+    ]
+    CONFIRMATION_CHOICES = [
+        ("SMART", "Smart confirmation"),
+        ("ALWAYS", "Always confirm"),
+    ]
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="assistant_profile")
+    assistant_name = models.CharField(max_length=40, default="Nova")
+    language = models.CharField(max_length=10, choices=LANGUAGE_CHOICES, default="AUTO")
+    voice_responses = models.BooleanField(default=True)
+    personality = models.CharField(max_length=20, choices=PERSONALITY_CHOICES, default="FRIENDLY")
+    confirmation_mode = models.CharField(max_length=20, choices=CONFIRMATION_CHOICES, default="SMART")
+    quick_add = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username} assistant: {self.assistant_name}"
+
+
+class AssistantCommand(models.Model):
+    STATUS_CHOICES = [
+        ("PENDING", "Pending confirmation"),
+        ("NEEDS_CLARIFICATION", "Needs clarification"),
+        ("COMPLETED", "Completed"),
+        ("CANCELLED", "Cancelled"),
+        ("FAILED", "Failed"),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="assistant_commands")
+    client_request_id = models.UUIDField()
+    intent = models.CharField(max_length=40)
+    safe_payload = models.JSONField(default=dict, blank=True)
+    result_payload = models.JSONField(default=dict, blank=True)
+    confidence = models.DecimalField(max_digits=4, decimal_places=3, default=Decimal("0.000"))
+    status = models.CharField(max_length=24, choices=STATUS_CHOICES, default="PENDING")
+    requires_confirmation = models.BooleanField(default=True)
+    response_text = models.TextField(blank=True, default="")
+    fingerprint = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    utterance_digest = models.CharField(max_length=64, blank=True, default="")
+    transaction = models.ForeignKey(
+        Expense,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assistant_commands",
+    )
+    executed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "client_request_id"],
+                name="uniq_user_assistant_request",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["user", "status", "-created_at"], name="assist_user_status_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username}: {self.intent} ({self.status})"
