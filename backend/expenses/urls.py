@@ -1,6 +1,13 @@
 from django.urls import path
 
 from .analytics_views import AnalyticsSummaryView, TransactionCsvExportView
+from .assistant_views import (
+    AssistantCancelView,
+    AssistantConfirmView,
+    AssistantHistoryView,
+    AssistantMessageView,
+    AssistantSettingsView,
+)
 from .views import (
     AccountDetailView, AccountListCreateView, BillDetailView, BillListCreateView,
     ChangePasswordView, DashboardSummaryView, DebtPaymentListCreateView, DeleteAccountView,
