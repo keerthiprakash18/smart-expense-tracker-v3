@@ -6,6 +6,11 @@ on:
     paths:
       - "frontend/**"
       - ".github/workflows/android-apk.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/android-apk.yml"
   workflow_dispatch:
 
 permissions:
