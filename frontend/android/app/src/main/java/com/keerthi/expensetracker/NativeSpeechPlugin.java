@@ -76,18 +76,54 @@ public class NativeSpeechPlugin extends Plugin {
 
     private void beginWakeMode(PluginCall call) {
         String assistantName = call.getString("assistantName", "Nova");
-        Intent intent = new Intent(getContext(), WakeWordService.class);
-        intent.setAction(WakeWordService.ACTION_START);
-        intent.putExtra(WakeWordService.EXTRA_ASSISTANT_NAME, assistantName);
-        try {
-            ContextCompat.startForegroundService(getContext(), intent);
-            JSObject result = new JSObject();
-            result.put("running", true);
-            result.put("wakePhrase", "Hey " + assistantName);
-            call.resolve(result);
-        } catch (Exception exception) {
-            call.reject("WAKE_MODE_START_FAILED", exception);
+        String language = call.getString("language", "AUTO");
+        String wakeToken = call.getString("wakeToken", "");
+        String apiBaseUrl = call.getString("apiBaseUrl", "");
+
+        if (wakeToken == null || wakeToken.trim().isEmpty() || apiBaseUrl == null || apiBaseUrl.trim().isEmpty()) {
+            call.reject("WAKE_SESSION_MISSING");
+            return;
         }
+
+        JSObject preparing = new JSObject();
+        preparing.put("state", WakeModelManager.isReady(getContext()) ? "ready" : "preparing");
+        notifyListeners("wakeModelState", preparing);
+
+        WakeModelManager.ensureModel(getContext(), new WakeModelManager.Callback() {
+            @Override
+            public void onReady(java.io.File modelDirectory) {
+                Intent intent = new Intent(getContext(), WakeWordService.class);
+                intent.setAction(WakeWordService.ACTION_START);
+                intent.putExtra(WakeWordService.EXTRA_ASSISTANT_NAME, assistantName);
+                intent.putExtra(WakeWordService.EXTRA_LANGUAGE, language);
+                intent.putExtra(WakeWordService.EXTRA_WAKE_TOKEN, wakeToken);
+                intent.putExtra(WakeWordService.EXTRA_API_BASE_URL, apiBaseUrl);
+                intent.putExtra(WakeWordService.EXTRA_MODEL_PATH, modelDirectory.getAbsolutePath());
+                try {
+                    ContextCompat.startForegroundService(getContext(), intent);
+                    JSObject ready = new JSObject();
+                    ready.put("state", "ready");
+                    notifyListeners("wakeModelState", ready);
+
+                    JSObject result = new JSObject();
+                    result.put("running", true);
+                    result.put("wakePhrase", "Hey " + assistantName);
+                    result.put("engine", "vosk-offline");
+                    result.put("modelReady", true);
+                    call.resolve(result);
+                } catch (Exception exception) {
+                    call.reject("WAKE_MODE_START_FAILED", exception);
+                }
+            }
+
+            @Override
+            public void onError(Exception error) {
+                JSObject failed = new JSObject();
+                failed.put("state", "failed");
+                notifyListeners("wakeModelState", failed);
+                call.reject("WAKE_MODEL_PREPARE_FAILED", error);
+            }
+        });
     }
 
     @PluginMethod
@@ -115,6 +151,8 @@ public class NativeSpeechPlugin extends Plugin {
         JSObject result = new JSObject();
         result.put("running", running);
         result.put("wakePhrase", "Hey " + assistantName);
+        result.put("engine", "vosk-offline");
+        result.put("modelReady", WakeModelManager.isReady(getContext()));
         call.resolve(result);
     }
 
