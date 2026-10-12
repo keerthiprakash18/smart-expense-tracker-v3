@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from .models import Account, AssistantCommand, Category, CategoryBudget, Expense, UserProfile
+from .models import Account, AssistantCommand, AssistantNote, Category, CategoryBudget, Expense, UserProfile
 
 
 class AssistantApiTests(APITestCase):
@@ -27,6 +27,17 @@ class AssistantApiTests(APITestCase):
             {"message": message, "client_request_id": str(request_id or uuid.uuid4())},
             format="json",
         )
+
+    def enable_wake_and_get_token(self):
+        settings = self.client.patch(
+            "/api/v3/assistant/settings/",
+            {"background_wake_enabled": True},
+            format="json",
+        )
+        self.assertEqual(settings.status_code, 200)
+        token_response = self.client.post("/api/v3/assistant/wake-token/", {}, format="json")
+        self.assertEqual(token_response.status_code, 201)
+        return token_response.data["token"]
 
     def test_settings_are_personal_and_persist(self):
         response = self.client.patch(
@@ -196,3 +207,82 @@ class AssistantApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(response.status_code, 400)
+
+
+    def test_note_command_saves_assistant_note(self):
+        response = self.post_message("Tomorrow consultant ku documents eduthutu poganum note pannu")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["intent"], "CREATE_NOTE")
+        self.assertEqual(response.data["status"], "COMPLETED")
+        note = AssistantNote.objects.get(user=self.user)
+        self.assertIn("Tomorrow consultant", note.content)
+        self.assertEqual(note.source, "TEXT")
+
+    def test_wake_message_requires_scoped_token(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.post(
+            "/api/v3/assistant/wake/message/",
+            {"message": "note this buy milk", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_background_wake_note_uses_scoped_token_and_source(self):
+        token = self.enable_wake_and_get_token()
+        self.client.force_authenticate(user=None)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        response = self.client.post(
+            "/api/v3/assistant/wake/message/",
+            {"message": "Tomorrow 10 AM consultant ku call panna note pannu", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["intent"], "CREATE_NOTE")
+        self.assertEqual(response.data["status"], "COMPLETED")
+        note = AssistantNote.objects.get(user=self.user)
+        self.assertEqual(note.source, "VOICE_WAKE")
+        self.assertIn("consultant", note.content.lower())
+        self.assertEqual(AssistantNote.objects.filter(user=self.other).count(), 0)
+
+    def test_wake_token_is_invalid_after_wake_mode_disabled(self):
+        token = self.enable_wake_and_get_token()
+        self.client.credentials()
+        self.client.force_authenticate(self.user)
+        disabled = self.client.patch(
+            "/api/v3/assistant/settings/",
+            {"background_wake_enabled": False},
+            format="json",
+        )
+        self.assertEqual(disabled.status_code, 200)
+
+        self.client.force_authenticate(user=None)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        response = self.client.post(
+            "/api/v3/assistant/wake/message/",
+            {"message": "note this buy milk", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_wake_finance_command_still_requires_confirmation(self):
+        token = self.enable_wake_and_get_token()
+        self.client.force_authenticate(user=None)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        response = self.client.post(
+            "/api/v3/assistant/wake/message/",
+            {"message": "Petrol ku 500 spend panniten", "client_request_id": str(uuid.uuid4())},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["intent"], "CREATE_EXPENSE")
+        self.assertEqual(response.data["status"], "PENDING")
+        self.assertEqual(Expense.objects.filter(user=self.user).count(), 0)
+
+        confirm = self.client.post(
+            f"/api/v3/assistant/wake/commands/{response.data['id']}/confirm/",
+            {},
+            format="json",
+        )
+        self.assertEqual(confirm.status_code, 200)
+        self.assertEqual(confirm.data["status"], "COMPLETED")
+        self.assertEqual(Expense.objects.filter(user=self.user).count(), 1)

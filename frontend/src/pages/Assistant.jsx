@@ -98,6 +98,7 @@ export default function Assistant() {
   const [settingsDraft, setSettingsDraft] = useState(defaultSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [savedNotes, setSavedNotes] = useState([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -107,6 +108,7 @@ export default function Assistant() {
   const [booting, setBooting] = useState(true);
   const [nativeSpeechSupported, setNativeSpeechSupported] = useState(false);
   const [wakeRunning, setWakeRunning] = useState(false);
+  const [wakeConsentOpen, setWakeConsentOpen] = useState(false);
   const recognitionRef = useRef(null);
   const bottomRef = useRef(null);
   const symbol = profile?.currency || '₹';
@@ -142,14 +144,15 @@ export default function Assistant() {
     Promise.all([
       api.get('/api/v3/assistant/settings/'),
       api.get('/api/v3/assistant/history/').catch(() => ({ data: { results: [] } })),
+      api.get('/api/v3/assistant/notes/').catch(() => ({ data: { results: [] } })),
     ])
-      .then(([settingsRes, historyRes]) => {
+      .then(([settingsRes, historyRes, notesRes]) => {
         if (!live) return;
         const next = { ...defaultSettings, ...(settingsRes.data || {}) };
         setSettings(next);
         setSettingsDraft(next);
         if (nativeAndroid && next.background_wake_enabled) {
-          startBackgroundWake(next.assistant_name)
+          startBackgroundWake(next.assistant_name, next.language)
             .then(() => setWakeRunning(true))
             .catch(() => setWakeRunning(false));
         }
@@ -158,6 +161,7 @@ export default function Assistant() {
           .filter((item) => item?.message)
           .map((item) => ({ id: `history-${item.id}`, role: 'assistant', text: item.message, command: item, historical: true }));
         setMessages(restored);
+        setSavedNotes(Array.isArray(notesRes.data?.results) ? notesRes.data.results : []);
       })
       .catch(() => {
         if (live) setMessages([{ id: 'boot-error', role: 'assistant', text: 'Assistant settings could not be loaded. You can still retry from this page.', error: true }]);
@@ -197,6 +201,14 @@ export default function Assistant() {
       });
       const command = response.data;
       pushAssistant(command);
+      if (command?.status === 'COMPLETED' && command?.intent === 'CREATE_NOTE' && command?.result?.note) {
+        setSavedNotes((prev) => [{
+          id: command.result.note_id,
+          content: command.result.note,
+          source: 'TEXT',
+          created_at: new Date().toISOString(),
+        }, ...prev].slice(0, 50));
+      }
       if (command?.status === 'COMPLETED' && ['CREATE_EXPENSE', 'CREATE_INCOME', 'UPDATE_TRANSACTION', 'DELETE_TRANSACTION'].includes(command.intent)) {
         await refresh();
       }
@@ -347,9 +359,14 @@ export default function Assistant() {
 
   useEffect(() => {
     if (!nativeAndroid) return undefined;
-    const onWake = () => {
+    const onWake = (event) => {
+      const transcript = String(event?.detail?.transcript || '').trim();
       window.setTimeout(() => {
-        if (!busy && !listening) startListening();
+        if (transcript) {
+          if (!busy) sendMessage(transcript);
+        } else if (!busy && !listening) {
+          startListening();
+        }
       }, 250);
     };
     window.addEventListener('smart-expense-wake', onWake);
@@ -373,7 +390,7 @@ export default function Assistant() {
       if (nativeAndroid) {
         try {
           if (next.background_wake_enabled) {
-            await startBackgroundWake(next.assistant_name);
+            await startBackgroundWake(next.assistant_name, next.language);
             setWakeRunning(true);
           } else {
             await stopBackgroundWake();
@@ -472,11 +489,21 @@ export default function Assistant() {
           </div>
           {nativeAndroid ? (
             <div className="assistant-toggle-row">
-              <button type="button" className={`assistant-toggle ${settingsDraft.background_wake_enabled ? 'active' : ''}`} onClick={() => setSettingsDraft((prev) => ({ ...prev, background_wake_enabled: !prev.background_wake_enabled }))}>
+              <button
+                type="button"
+                className={`assistant-toggle ${settingsDraft.background_wake_enabled ? 'active' : ''}`}
+                onClick={() => {
+                  if (settingsDraft.background_wake_enabled) {
+                    setSettingsDraft((prev) => ({ ...prev, background_wake_enabled: false }));
+                  } else {
+                    setWakeConsentOpen(true);
+                  }
+                }}
+              >
                 <Mic size={18}/>
                 <span>
                   <strong>Background Wake Mode {wakeRunning ? '· Active' : ''}</strong>
-                  <small>Say “Hey {settingsDraft.assistant_name || 'Nova'}” outside the app. Android keeps a visible microphone notification while enabled.</small>
+                  <small>Say “Hey {settingsDraft.assistant_name || 'Nova'}” outside the app. First enable downloads an offline wake model; after that wake detection stays on-device.</small>
                 </span>
                 <i/>
               </button>
@@ -492,6 +519,54 @@ export default function Assistant() {
             </button>
           </div>
         </Surface>
+      )}
+
+      {wakeConsentOpen && (
+        <div className="modal-backdrop" onMouseDown={() => setWakeConsentOpen(false)}>
+          <div className="modal-card reset-card" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="wake-consent-title">
+            <div className="modal-head">
+              <div>
+                <span>BACKGROUND VOICE ACCESS</span>
+                <h2 id="wake-consent-title">Enable “Hey {settingsDraft.assistant_name || 'Nova'}”?</h2>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setWakeConsentOpen(false)} aria-label="Close background wake disclosure">×</button>
+            </div>
+            <div className="settings-note">
+              <Mic size={20}/>
+              <div>
+                <strong>Microphone stays active while Wake Mode is on</strong>
+                <span>Android shows a persistent notification, and you can stop Wake Mode from that notification or this settings screen at any time.</span>
+              </div>
+            </div>
+            <div className="settings-note">
+              <Sparkles size={20}/>
+              <div>
+                <strong>Wake phrase detection is local after first setup</strong>
+                <span>The first enable downloads an offline speech model. “Hey {settingsDraft.assistant_name || 'Nova'}” detection then runs on this device.</span>
+              </div>
+            </div>
+            <div className="settings-note">
+              <Volume2 size={20}/>
+              <div>
+                <strong>Your command starts only after the wake phrase</strong>
+                <span>After wake, Android speech recognition transcribes the command; depending on your device it may use an Android speech service/network. The transcript is sent to Smart Expense to process your finance request or save a note. Smart Expense does not store raw microphone audio.</span>
+              </div>
+            </div>
+            <div className="assistant-command-actions">
+              <button type="button" className="button ghost" onClick={() => setWakeConsentOpen(false)}>Not now</button>
+              <button
+                type="button"
+                className="button primary"
+                onClick={() => {
+                  setSettingsDraft((prev) => ({ ...prev, background_wake_enabled: true }));
+                  setWakeConsentOpen(false);
+                }}
+              >
+                Enable Wake Mode
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <Surface className="assistant-console">
@@ -576,6 +651,31 @@ export default function Assistant() {
           <span className="privacy-dot"/>
           {wakeRunning ? `Background wake mode is active for “Hey ${settings.assistant_name}”. Android shows a persistent microphone notification.` : 'Push-to-talk is active. Raw microphone audio is not stored by Smart Expense.'}
         </div>
+      </Surface>
+
+      <Surface className="assistant-notes-panel">
+        <div className="section-heading">
+          <div><span>SAVED NOTES</span><h2>Quick captures</h2></div>
+          <small>{savedNotes.length ? `${savedNotes.length} saved` : 'Voice & text'}</small>
+        </div>
+        {savedNotes.length ? (
+          <div className="transaction-list detailed">
+            {savedNotes.slice(0, 8).map((note) => (
+              <div className="transaction-row" key={note.id}>
+                <span className="transaction-icon"><Sparkles size={17}/></span>
+                <span className="transaction-main">
+                  <strong>{note.content}</strong>
+                  <span>{note.source === 'VOICE_WAKE' ? 'Background voice capture' : note.source === 'VOICE_APP' ? 'In-app voice' : 'Assistant note'} · {note.created_at ? new Date(note.created_at).toLocaleString() : 'Saved'}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state compact">
+            <Sparkles size={20}/>
+            <span>Say “Hey {settings.assistant_name}, remember this…” or type “note pannu” to save a quick note.</span>
+          </div>
+        )}
       </Surface>
     </div>
   );
