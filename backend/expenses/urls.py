@@ -8,6 +8,10 @@ from .assistant_views import (
     AssistantMessageView,
     AssistantNotesView,
     AssistantSettingsView,
+    AssistantWakeCancelView,
+    AssistantWakeConfirmView,
+    AssistantWakeMessageView,
+    AssistantWakeTokenView,
 )
 from .views import (
     AccountDetailView, AccountListCreateView, BillDetailView, BillListCreateView,
@@ -60,6 +64,10 @@ urlpatterns = [
     path("v3/assistant/commands/<int:command_id>/cancel/", AssistantCancelView.as_view(), name="v3-assistant-cancel"),
     path("v3/assistant/history/", AssistantHistoryView.as_view(), name="v3-assistant-history"),
     path("v3/assistant/notes/", AssistantNotesView.as_view(), name="v3-assistant-notes"),
+    path("v3/assistant/wake-token/", AssistantWakeTokenView.as_view(), name="v3-assistant-wake-token"),
+    path("v3/assistant/wake/message/", AssistantWakeMessageView.as_view(), name="v3-assistant-wake-message"),
+    path("v3/assistant/wake/commands/<int:command_id>/confirm/", AssistantWakeConfirmView.as_view(), name="v3-assistant-wake-confirm"),
+    path("v3/assistant/wake/commands/<int:command_id>/cancel/", AssistantWakeCancelView.as_view(), name="v3-assistant-wake-cancel"),
     path("v3/transactions/export.csv/", TransactionCsvExportView.as_view(), name="v3-transactions-export"),
 
     # V3 finance engine
