@@ -6,6 +6,7 @@ import { useFinance } from '../context/FinanceContext';
 import { useTheme } from '../context/ThemeContext';
 import BrandMark from './BrandMark';
 import api from '../services/api';
+import { stopBackgroundWake } from '../services/nativeSpeech';
 
 const nav = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
@@ -35,7 +36,10 @@ export default function AppShell() {
   }, [toast, setToast]);
 
   const signOut = async () => {
-    try { await api.post('/api/logout/', {}); } catch {}
+    try {
+      await stopBackgroundWake().catch(() => {});
+      await api.post('/api/logout/', {});
+    } catch {}
     finally { logoutUser(); navigate('/login', { replace: true }); }
   };
 
