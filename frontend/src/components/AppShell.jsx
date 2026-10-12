@@ -10,7 +10,8 @@ import api from '../services/api';
 const nav = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/transactions', label: 'Transactions', icon: WalletCards },
-  { to: '/analytics', label: 'Analytics', icon: BarChart3 },\n  { to: '/assistant', label: 'AI Assistant', icon: Bot },
+  { to: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { to: '/assistant', label: 'AI Assistant', icon: Bot },
   { to: '/money', label: 'Money Hub', icon: CircleDollarSign },
   { to: '/planner', label: 'Planner', icon: WandSparkles },
   { to: '/receipts', label: 'Receipt Vault', icon: ReceiptText },
