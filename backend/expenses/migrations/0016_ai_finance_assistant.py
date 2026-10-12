@@ -1,4 +1,4 @@
-from django.conf import settings
+import decimal\nfrom django.conf import settings
 from django.db import migrations, models
 import django.db.models.deletion
 import django.utils.timezone
@@ -35,7 +35,7 @@ class Migration(migrations.Migration):
                 ("intent", models.CharField(max_length=40)),
                 ("safe_payload", models.JSONField(blank=True, default=dict)),
                 ("result_payload", models.JSONField(blank=True, default=dict)),
-                ("confidence", models.DecimalField(decimal_places=3, default=0, max_digits=4)),
+                ("confidence", models.DecimalField(decimal_places=3, default=decimal.Decimal("0.000"), max_digits=4)),
                 ("status", models.CharField(choices=[("PENDING", "Pending confirmation"), ("NEEDS_CLARIFICATION", "Needs clarification"), ("COMPLETED", "Completed"), ("CANCELLED", "Cancelled"), ("FAILED", "Failed")], default="PENDING", max_length=24)),
                 ("requires_confirmation", models.BooleanField(default=True)),
                 ("response_text", models.TextField(blank=True, default="")),
