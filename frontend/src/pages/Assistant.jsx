@@ -13,6 +13,13 @@ import {
   X,
 } from 'lucide-react';
 import api from '../services/api';
+import {
+  cancelNativeSpeech,
+  isNativeAndroid,
+  nativeSpeechAvailable,
+  startNativeSpeech,
+  stopNativeSpeech,
+} from '../services/nativeSpeech';
 import { useFinance } from '../context/FinanceContext';
 import { PageHeader, Surface, money } from '../components/Ui';
 
@@ -93,15 +100,17 @@ export default function Assistant() {
   const [interim, setInterim] = useState('');
   const [voiceError, setVoiceError] = useState('');
   const [booting, setBooting] = useState(true);
+  const [nativeSpeechSupported, setNativeSpeechSupported] = useState(false);
   const recognitionRef = useRef(null);
   const bottomRef = useRef(null);
   const symbol = profile?.currency || '₹';
 
+  const nativeAndroid = useMemo(() => isNativeAndroid(), []);
   const SpeechRecognition = useMemo(
     () => window.SpeechRecognition || window.webkitSpeechRecognition || null,
     []
   );
-  const speechSupported = Boolean(SpeechRecognition);
+  const speechSupported = nativeAndroid ? nativeSpeechSupported : Boolean(SpeechRecognition);
 
   const speak = (text, currentSettings = settings) => {
     if (!currentSettings.voice_responses || !('speechSynthesis' in window) || !text) return;
@@ -116,6 +125,11 @@ export default function Assistant() {
 
   useEffect(() => {
     let live = true;
+    if (nativeAndroid) {
+      nativeSpeechAvailable().then((available) => {
+        if (live) setNativeSpeechSupported(available);
+      });
+    }
     Promise.all([
       api.get('/api/v3/assistant/settings/'),
       api.get('/api/v3/assistant/history/').catch(() => ({ data: { results: [] } })),
@@ -144,8 +158,9 @@ export default function Assistant() {
 
   useEffect(() => () => {
     try { recognitionRef.current?.abort(); } catch {}
+    if (nativeAndroid) cancelNativeSpeech().catch(() => {});
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-  }, []);
+  }, [nativeAndroid]);
 
   const pushAssistant = (command, currentSettings = settings) => {
     const text = command?.message || 'Done.';
@@ -209,23 +224,78 @@ export default function Assistant() {
     }
   };
 
-  const stopListening = () => {
-    try { recognitionRef.current?.stop(); } catch {}
+  const voiceErrorMessage = (raw) => {
+    const code = String(raw || '').toUpperCase();
+    if (code.includes('MICROPHONE_PERMISSION_DENIED') || code.includes('NOT-ALLOWED')) {
+      return 'Microphone permission is blocked. Allow Microphone for Smart Expense Tracker in Android settings.';
+    }
+    if (code.includes('NO_SPEECH') || code.includes('NO-SPEECH')) {
+      return 'I did not hear anything. Tap the mic and try again.';
+    }
+    if (code.includes('NETWORK')) {
+      return 'Voice recognition needs a network connection right now.';
+    }
+    if (code.includes('AUDIO_CAPTURE')) {
+      return 'Android could not access the microphone. Close other apps using the mic and retry.';
+    }
+    if (code.includes('RECOGNIZER_BUSY')) {
+      return 'Android speech recognition is busy. Try again in a moment.';
+    }
+    if (code.includes('UNAVAILABLE')) {
+      return 'Speech recognition is not available on this Android device. You can still type your request.';
+    }
+    if (code.includes('CANCELLED') || code.includes('REPLACED')) {
+      return '';
+    }
+    return 'Voice recognition stopped. You can retry or type your request.';
+  };
+
+  const stopListening = async () => {
+    if (nativeAndroid) {
+      try { await stopNativeSpeech(); } catch {}
+    } else {
+      try { recognitionRef.current?.stop(); } catch {}
+    }
     setListening(false);
   };
 
-  const startListening = () => {
+  const startListening = async () => {
     if (!speechSupported) {
-      setVoiceError('Voice recognition is not available in this browser. Type your request below.');
+      setVoiceError(
+        nativeAndroid
+          ? 'Android speech recognition is unavailable on this device. You can still type your request.'
+          : 'Voice recognition is not available in this browser. Type your request below.'
+      );
       return;
     }
     if (listening) {
-      stopListening();
+      await stopListening();
       return;
     }
 
     setVoiceError('');
     setInterim('');
+
+    if (nativeAndroid) {
+      setListening(true);
+      try {
+        const result = await startNativeSpeech(settings.language);
+        const finalText = String(result?.text || '').trim();
+        setListening(false);
+        if (finalText) {
+          await sendMessage(finalText);
+        } else {
+          setVoiceError('I did not hear anything. Tap the mic and try again.');
+        }
+      } catch (error) {
+        setListening(false);
+        setInterim('');
+        const message = voiceErrorMessage(error?.message || error);
+        if (message) setVoiceError(message);
+      }
+      return;
+    }
+
     const recognition = new SpeechRecognition();
     recognitionRef.current = recognition;
     recognition.continuous = false;
@@ -252,13 +322,8 @@ export default function Assistant() {
     recognition.onerror = (event) => {
       setListening(false);
       setInterim('');
-      const map = {
-        'not-allowed': 'Microphone access is blocked. Allow microphone permission or type your request.',
-        'no-speech': 'I did not hear anything. Tap the mic and try again.',
-        'audio-capture': 'No microphone is available on this device.',
-        'network': 'Voice recognition needs a network connection right now.',
-      };
-      setVoiceError(map[event.error] || 'Voice recognition stopped. You can retry or type your request.');
+      const message = voiceErrorMessage(event.error);
+      if (message) setVoiceError(message);
     };
     recognition.onend = () => setListening(false);
 
