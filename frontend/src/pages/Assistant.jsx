@@ -149,7 +149,7 @@ export default function Assistant() {
         setSettings(next);
         setSettingsDraft(next);
         if (nativeAndroid && next.background_wake_enabled) {
-          startBackgroundWake(next.assistant_name)
+          startBackgroundWake(next.assistant_name, next.language)
             .then(() => setWakeRunning(true))
             .catch(() => setWakeRunning(false));
         }
@@ -347,9 +347,14 @@ export default function Assistant() {
 
   useEffect(() => {
     if (!nativeAndroid) return undefined;
-    const onWake = () => {
+    const onWake = (event) => {
+      const transcript = String(event?.detail?.transcript || '').trim();
       window.setTimeout(() => {
-        if (!busy && !listening) startListening();
+        if (transcript) {
+          if (!busy) sendMessage(transcript);
+        } else if (!busy && !listening) {
+          startListening();
+        }
       }, 250);
     };
     window.addEventListener('smart-expense-wake', onWake);
@@ -373,7 +378,7 @@ export default function Assistant() {
       if (nativeAndroid) {
         try {
           if (next.background_wake_enabled) {
-            await startBackgroundWake(next.assistant_name);
+            await startBackgroundWake(next.assistant_name, next.language);
             setWakeRunning(true);
           } else {
             await stopBackgroundWake();
@@ -476,7 +481,7 @@ export default function Assistant() {
                 <Mic size={18}/>
                 <span>
                   <strong>Background Wake Mode {wakeRunning ? '· Active' : ''}</strong>
-                  <small>Say “Hey {settingsDraft.assistant_name || 'Nova'}” outside the app. Android keeps a visible microphone notification while enabled.</small>
+                  <small>Say “Hey {settingsDraft.assistant_name || 'Nova'}” outside the app. First enable downloads an offline wake model; after that wake detection stays on-device.</small>
                 </span>
                 <i/>
               </button>
