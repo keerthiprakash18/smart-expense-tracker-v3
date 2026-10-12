@@ -211,7 +211,7 @@ REST_FRAMEWORK = {
         "security": os.getenv("THROTTLE_SECURITY", "30/hour"),
         "password_reset": os.getenv("THROTTLE_PASSWORD_RESET", "20/hour"),
         "ocr": os.getenv("THROTTLE_OCR", "30/hour"),
-        "imports": os.getenv("THROTTLE_IMPORTS", "20/hour"),
+        "imports": os.getenv("THROTTLE_IMPORTS", "20/hour"),\n        "assistant": os.getenv("THROTTLE_ASSISTANT", "60/hour"),
     },
 }
 
