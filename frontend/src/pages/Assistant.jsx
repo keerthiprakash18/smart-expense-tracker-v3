@@ -148,6 +148,11 @@ export default function Assistant() {
         const next = { ...defaultSettings, ...(settingsRes.data || {}) };
         setSettings(next);
         setSettingsDraft(next);
+        if (nativeAndroid && next.background_wake_enabled) {
+          startBackgroundWake(next.assistant_name)
+            .then(() => setWakeRunning(true))
+            .catch(() => setWakeRunning(false));
+        }
         const recent = Array.isArray(historyRes.data?.results) ? historyRes.data.results.slice(0, 4).reverse() : [];
         const restored = recent
           .filter((item) => item?.message)
