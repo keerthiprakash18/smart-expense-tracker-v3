@@ -7,6 +7,8 @@ let updateTimer = null;
 export function enablePwaAutoUpdate() {
   if (!('serviceWorker' in navigator)) return;
 
+  const controlledAtStartup = Boolean(navigator.serviceWorker.controller);
+
   const updateSW = registerSW({
     immediate: true,
     onNeedRefresh() {
@@ -27,7 +29,10 @@ export function enablePwaAutoUpdate() {
   });
 
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (reloading) return;
+    // A first-time PWA install can emit controllerchange after clientsClaim.
+    // Reload only when this page was already controlled, which means this is
+    // an actual app update rather than initial service-worker activation.
+    if (!controlledAtStartup || reloading) return;
     reloading = true;
     window.location.reload();
   });
