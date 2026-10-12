@@ -120,3 +120,48 @@ Before the V3 batch release:
 ## Security
 
 Never commit `.env`, database files, signing keys, passwords, SMTP credentials, S3/R2 secrets or API keys. Keep production secrets in Railway/Vercel environment variables.
+
+
+## AI Personal Finance Assistant
+
+Smart Expense includes a personalized, authenticated finance assistant with push-to-talk and text input.
+
+Key behavior:
+
+- Per-user assistant name, language, voice reply and confirmation preferences.
+- English, Tamil and common Tanglish finance commands.
+- Deterministic backend calculations for balances, spending, budgets and comparisons.
+- Expense/income mutations are converted into strict structured commands and never receive arbitrary database access.
+- Destructive or ambiguous actions require confirmation/clarification.
+- Request UUIDs and transaction fingerprints reduce accidental duplicate voice entries.
+- Raw microphone audio is not stored by Smart Expense. Browser speech recognition is used when available; text input is always available.
+- Assistant code is lazy-loaded with the protected application route.
+
+Optional backend AI-provider fallback:
+
+```env
+# Common commands work without an external LLM.
+# Configure an OpenAI-compatible chat-completions endpoint only if desired.
+ASSISTANT_LLM_API_URL=
+ASSISTANT_LLM_API_KEY=
+ASSISTANT_LLM_MODEL=
+ASSISTANT_QUICK_ADD_MAX=1000
+THROTTLE_ASSISTANT=60/hour
+```
+
+The external provider is only consulted when the local multilingual intent parser is uncertain. The application sends the current utterance and the authenticated user's category names, not the user's full financial history. Provider keys remain server-side.
+
+Assistant API:
+
+- `GET/PATCH /api/v3/assistant/settings/`
+- `POST /api/v3/assistant/message/`
+- `POST /api/v3/assistant/commands/<id>/confirm/`
+- `POST /api/v3/assistant/commands/<id>/cancel/`
+- `GET /api/v3/assistant/history/`
+
+Run assistant-specific tests:
+
+```bash
+cd backend
+python manage.py test expenses.test_assistant
+```
