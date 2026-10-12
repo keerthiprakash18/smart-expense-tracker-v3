@@ -1,0 +1,118 @@
+name: Android Play AAB
+
+on:
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/android-aab.yml"
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/android-aab.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-aab:
+    runs-on: ubuntu-latest
+    env:
+      VITE_API_URL: https://smart-expense-tracker-v3-production.up.railway.app
+      ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+      ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+      ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+      ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Android SDK 36
+        uses: android-actions/setup-android@v4
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Sync Capacitor Android project
+        run: npx cap sync android
+
+      - name: Detect signing availability
+        id: signing
+        shell: bash
+        run: |
+          if [[ -n "$ANDROID_UPLOAD_KEYSTORE_BASE64" && -n "$ANDROID_UPLOAD_KEYSTORE_PASSWORD" && -n "$ANDROID_UPLOAD_KEY_ALIAS" && -n "$ANDROID_UPLOAD_KEY_PASSWORD" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore Play upload keystore
+        if: steps.signing.outputs.available == 'true'
+        shell: bash
+        run: |
+          printf '%s' "$ANDROID_UPLOAD_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/smart-expense-upload.jks"
+          chmod 600 "$RUNNER_TEMP/smart-expense-upload.jks"
+          echo "ANDROID_UPLOAD_KEYSTORE_PATH=$RUNNER_TEMP/smart-expense-upload.jks" >> "$GITHUB_ENV"
+
+      - name: Verify upload key
+        if: steps.signing.outputs.available == 'true'
+        shell: bash
+        run: |
+          keytool -list             -keystore "$ANDROID_UPLOAD_KEYSTORE_PATH"             -storepass "$ANDROID_UPLOAD_KEYSTORE_PASSWORD"             -alias "$ANDROID_UPLOAD_KEY_ALIAS" >/dev/null
+
+      - name: Build release AAB
+        working-directory: frontend/android
+        run: |
+          chmod +x gradlew
+          ./gradlew bundleRelease --no-daemon
+
+      - name: Name bundle
+        id: bundle
+        shell: bash
+        run: |
+          mkdir -p release
+          if [[ "${{ steps.signing.outputs.available }}" == "true" ]]; then
+            NAME="SmartExpenseTracker-v1.1.0-build2026101201-signed.aab"
+          else
+            NAME="SmartExpenseTracker-v1.1.0-build2026101201-UNSIGNED.aab"
+          fi
+          cp android/app/build/outputs/bundle/release/app-release.aab "release/$NAME"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-expense-play-aab
+          path: frontend/release/${{ steps.bundle.outputs.name }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Signing status
+        shell: bash
+        run: |
+          if [[ "${{ steps.signing.outputs.available }}" == "true" ]]; then
+            echo "Play upload bundle is signed with the configured upload key."
+          else
+            echo "::warning::AAB is unsigned because Play upload-key secrets are not configured."
+          fi
