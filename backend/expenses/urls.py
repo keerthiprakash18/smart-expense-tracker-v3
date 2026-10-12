@@ -44,6 +44,13 @@ urlpatterns = [
     path("dashboard/", DashboardSummaryView.as_view(), name="dashboard-summary"),
     path("scan-receipt/", ReceiptScanView.as_view(), name="scan-receipt"),
     path("v3/analytics/summary/", AnalyticsSummaryView.as_view(), name="v3-analytics-summary"),
+
+    # AI personal finance assistant
+    path("v3/assistant/settings/", AssistantSettingsView.as_view(), name="v3-assistant-settings"),
+    path("v3/assistant/message/", AssistantMessageView.as_view(), name="v3-assistant-message"),
+    path("v3/assistant/commands/<int:command_id>/confirm/", AssistantConfirmView.as_view(), name="v3-assistant-confirm"),
+    path("v3/assistant/commands/<int:command_id>/cancel/", AssistantCancelView.as_view(), name="v3-assistant-cancel"),
+    path("v3/assistant/history/", AssistantHistoryView.as_view(), name="v3-assistant-history"),
     path("v3/transactions/export.csv/", TransactionCsvExportView.as_view(), name="v3-transactions-export"),
 
     # V3 finance engine
