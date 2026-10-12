@@ -19,6 +19,9 @@ import {
   nativeSpeechAvailable,
   startNativeSpeech,
   stopNativeSpeech,
+  startBackgroundWake,
+  stopBackgroundWake,
+  getBackgroundWakeStatus,
 } from '../services/nativeSpeech';
 import { useFinance } from '../context/FinanceContext';
 import { PageHeader, Surface, money } from '../components/Ui';
@@ -30,6 +33,8 @@ const defaultSettings = {
   personality: 'FRIENDLY',
   confirmation_mode: 'SMART',
   quick_add: false,
+  background_wake_enabled: false,
+  wake_phrase: 'Hey Nova',
 };
 
 const suggestions = [
@@ -101,6 +106,7 @@ export default function Assistant() {
   const [voiceError, setVoiceError] = useState('');
   const [booting, setBooting] = useState(true);
   const [nativeSpeechSupported, setNativeSpeechSupported] = useState(false);
+  const [wakeRunning, setWakeRunning] = useState(false);
   const recognitionRef = useRef(null);
   const bottomRef = useRef(null);
   const symbol = profile?.currency || '₹';
@@ -129,6 +135,9 @@ export default function Assistant() {
       nativeSpeechAvailable().then((available) => {
         if (live) setNativeSpeechSupported(available);
       });
+      getBackgroundWakeStatus().then((status) => {
+        if (live) setWakeRunning(Boolean(status?.running));
+      }).catch(() => {});
     }
     Promise.all([
       api.get('/api/v3/assistant/settings/'),
@@ -331,6 +340,17 @@ export default function Assistant() {
     catch { setVoiceError('Voice recognition could not start. Try again or use text input.'); }
   };
 
+  useEffect(() => {
+    if (!nativeAndroid) return undefined;
+    const onWake = () => {
+      window.setTimeout(() => {
+        if (!busy && !listening) startListening();
+      }, 250);
+    };
+    window.addEventListener('smart-expense-wake', onWake);
+    return () => window.removeEventListener('smart-expense-wake', onWake);
+  }, [nativeAndroid, busy, listening, settings.language, speechSupported]);
+
   const saveSettings = async () => {
     if (savingSettings) return;
     setSavingSettings(true);
@@ -342,8 +362,27 @@ export default function Assistant() {
         personality: settingsDraft.personality,
         confirmation_mode: settingsDraft.confirmation_mode,
         quick_add: Boolean(settingsDraft.quick_add),
+        background_wake_enabled: Boolean(settingsDraft.background_wake_enabled),
       });
-      const next = { ...defaultSettings, ...response.data };
+      let next = { ...defaultSettings, ...response.data };
+      if (nativeAndroid) {
+        try {
+          if (next.background_wake_enabled) {
+            await startBackgroundWake(next.assistant_name);
+            setWakeRunning(true);
+          } else {
+            await stopBackgroundWake();
+            setWakeRunning(false);
+          }
+        } catch (wakeError) {
+          if (next.background_wake_enabled) {
+            await api.patch('/api/v3/assistant/settings/', { background_wake_enabled: false }).catch(() => {});
+            next = { ...next, background_wake_enabled: false };
+            setWakeRunning(false);
+            setVoiceError('Background wake mode could not start. Check microphone permission and try again.');
+          }
+        }
+      }
       setSettings(next);
       setSettingsDraft(next);
       setSettingsOpen(false);
@@ -426,6 +465,22 @@ export default function Assistant() {
               <i/>
             </button>
           </div>
+          {nativeAndroid ? (
+            <div className="assistant-toggle-row">
+              <button type="button" className={`assistant-toggle ${settingsDraft.background_wake_enabled ? 'active' : ''}`} onClick={() => setSettingsDraft((prev) => ({ ...prev, background_wake_enabled: !prev.background_wake_enabled }))}>
+                <Mic size={18}/>
+                <span>
+                  <strong>Background Wake Mode {wakeRunning ? '· Active' : ''}</strong>
+                  <small>Say “Hey {settingsDraft.assistant_name || 'Nova'}” outside the app. Android keeps a visible microphone notification while enabled.</small>
+                </span>
+                <i/>
+              </button>
+            </div>
+          ) : (
+            <div className="assistant-voice-error">
+              <MicOff size={15}/><span>Background “Hey {settingsDraft.assistant_name || 'Nova'}” wake mode requires the native Android app. Voice inside this installed web app still works.</span>
+            </div>
+          )}
           <div className="assistant-settings-actions">
             <button type="button" className="button primary" onClick={saveSettings} disabled={savingSettings || !settingsDraft.assistant_name.trim()}>
               {savingSettings ? 'Saving…' : 'Save settings'}
@@ -514,7 +569,7 @@ export default function Assistant() {
         </div>
         <div className="assistant-privacy-note">
           <span className="privacy-dot"/>
-          Push-to-talk only. Raw microphone audio is not stored by Smart Expense.
+          {wakeRunning ? `Background wake mode is active for “Hey ${settings.assistant_name}”. Android shows a persistent microphone notification.` : 'Push-to-talk is active. Raw microphone audio is not stored by Smart Expense.'}
         </div>
       </Surface>
     </div>
