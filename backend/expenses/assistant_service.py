@@ -15,6 +15,7 @@ from django.utils import timezone
 from .models import (
     Account,
     AssistantCommand,
+    AssistantNote,
     AssistantProfile,
     Category,
     CategoryBudget,
@@ -26,6 +27,7 @@ from .views import balance_delta, ensure_default_accounts, get_user_account, saf
 
 
 SUPPORTED_INTENTS = {
+    "CREATE_NOTE",
     "CREATE_EXPENSE",
     "CREATE_INCOME",
     "UPDATE_TRANSACTION",
@@ -83,6 +85,11 @@ UPDATE_WORDS = ["update", "change", "correct", "instead", "illa", "இல்ல"
 QUERY_WORDS = [
     "how much", "evlo", "எவ்வளவு", "show", "tell", "summary", "balance", "budget", "spent this",
     "செலவு எவ்வளவு", "எவ்வளவு செலவு",
+]
+NOTE_WORDS = [
+    "note pannu", "note panniko", "note pannunga", "note this", "make a note",
+    "remember this", "remember that", "save this note", "write this down",
+    "நோட் பண்ணு", "நோட் பண்ணிக்கோ", "குறிச்சு வை", "நினைவில் வை",
 ]
 
 
@@ -216,6 +223,31 @@ def _extract_referenced_category(user, text):
     return category if confidence >= 0.8 else None
 
 
+def _extract_note_content(text):
+    value = _clean(text)
+    low = value.lower()
+    patterns = [
+        r"\bnote\s+(?:this|that)\b[:\s-]*",
+        r"\bmake\s+a\s+note\b[:\s-]*",
+        r"\bremember\s+(?:this|that)\b[:\s-]*",
+        r"\bsave\s+this\s+note\b[:\s-]*",
+        r"\bwrite\s+this\s+down\b[:\s-]*",
+    ]
+    cleaned = value
+    for pattern in patterns:
+        cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE).strip()
+    suffixes = [
+        "note pannu", "note panniko", "note pannunga",
+        "நோட் பண்ணு", "நோட் பண்ணிக்கோ", "குறிச்சு வை", "நினைவில் வை",
+    ]
+    low_cleaned = cleaned.lower()
+    for suffix in suffixes:
+        if low_cleaned.endswith(suffix.lower()):
+            cleaned = cleaned[: len(cleaned) - len(suffix)].strip(" ,.-")
+            break
+    return cleaned or value
+
+
 def _basic_parse(user, utterance):
     text = _clean(utterance)
     low = text.lower()
@@ -224,7 +256,10 @@ def _basic_parse(user, utterance):
     category, category_confidence = resolve_category(user, text, "EXPENSE")
     income_category, income_confidence = resolve_category(user, text, "INCOME")
 
-    if _contains_any(text, DELETE_WORDS):
+    if _contains_any(text, NOTE_WORDS):
+        intent = "CREATE_NOTE"
+        confidence = 0.99
+    elif _contains_any(text, DELETE_WORDS):
         intent = "DELETE_TRANSACTION"
         confidence = 0.9
     elif _contains_any(text, UPDATE_WORDS):
@@ -267,6 +302,7 @@ def _basic_parse(user, utterance):
     start, end, period = _period_dates(text)
 
     payload = {
+        "note_content": _extract_note_content(text) if intent == "CREATE_NOTE" else None,
         "amount": str(amount) if amount is not None else None,
         "category": selected_category,
         "title": _title_from_text(text, selected_category, tx_type),
@@ -307,7 +343,7 @@ def _llm_parse(user, utterance, local_result):
         "Allowed intents: " + ", ".join(sorted(SUPPORTED_INTENTS)) + ". "
         "Never invent an amount. Use null when missing. "
         "Output keys: intent, confidence, payload. "
-        "payload may contain amount, category, title, transaction_type, date, period_label. "
+        "payload may contain amount, category, title, transaction_type, date, period_label, note_content. "
         "The user can speak English, Tamil or Tanglish."
     )
     body = {
@@ -334,7 +370,7 @@ def _llm_parse(user, utterance, local_result):
         confidence = float(result.get("confidence", 0))
         payload = result.get("payload") if isinstance(result.get("payload"), dict) else {}
         merged = dict(local_result.get("payload") or {})
-        for key_name in ("amount", "category", "title", "transaction_type", "date", "period_label"):
+        for key_name in ("amount", "category", "title", "transaction_type", "date", "period_label", "note_content"):
             if payload.get(key_name) not in (None, ""):
                 merged[key_name] = payload[key_name]
         return {"intent": intent, "confidence": max(0.0, min(1.0, confidence)), "payload": merged}
@@ -569,7 +605,10 @@ def prepare_command(user, utterance, client_request_id):
         return existing, False
 
     parsed = parse_command(user, text)
-    parsed, superseded_command = _merge_recent_context(user, text, parsed)
+    if parsed.get("intent") == "CREATE_NOTE":
+        superseded_command = None
+    else:
+        parsed, superseded_command = _merge_recent_context(user, text, parsed)
     intent = parsed["intent"]
     confidence = float(parsed.get("confidence") or 0)
     payload = parsed.get("payload") or {}
@@ -580,6 +619,33 @@ def prepare_command(user, utterance, client_request_id):
 
     if intent not in SUPPORTED_INTENTS:
         raise AssistantError("That action is not supported yet.")
+
+    if intent == "CREATE_NOTE":
+        note_content = _clean(payload.get("note_content") or text)
+        if not note_content:
+            raise AssistantError("Tell me what you want me to note.")
+        if len(note_content) > 2000:
+            raise AssistantError("Keep a single note under 2000 characters.")
+        source = "VOICE_WAKE" if payload.get("source") == "VOICE_WAKE" else "TEXT"
+        note = AssistantNote.objects.create(
+            user=user,
+            content=note_content,
+            source=source,
+        )
+        command = AssistantCommand.objects.create(
+            user=user,
+            client_request_id=client_request_id,
+            intent=intent,
+            safe_payload={**payload, "note_content": note_content, "source": source},
+            confidence=confidence,
+            status="COMPLETED",
+            requires_confirmation=False,
+            response_text="Done. I saved that to your notes.",
+            result_payload={"note_id": note.id, "note": note.content},
+            utterance_digest=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            executed_at=timezone.now(),
+        )
+        return command, True
 
     if intent not in MUTATING_INTENTS:
         result = _query_response(user, intent, payload)
