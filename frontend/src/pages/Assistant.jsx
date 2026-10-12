@@ -107,6 +107,7 @@ export default function Assistant() {
   const [booting, setBooting] = useState(true);
   const [nativeSpeechSupported, setNativeSpeechSupported] = useState(false);
   const [wakeRunning, setWakeRunning] = useState(false);
+  const [wakeConsentOpen, setWakeConsentOpen] = useState(false);
   const recognitionRef = useRef(null);
   const bottomRef = useRef(null);
   const symbol = profile?.currency || '₹';
@@ -477,7 +478,17 @@ export default function Assistant() {
           </div>
           {nativeAndroid ? (
             <div className="assistant-toggle-row">
-              <button type="button" className={`assistant-toggle ${settingsDraft.background_wake_enabled ? 'active' : ''}`} onClick={() => setSettingsDraft((prev) => ({ ...prev, background_wake_enabled: !prev.background_wake_enabled }))}>
+              <button
+                type="button"
+                className={`assistant-toggle ${settingsDraft.background_wake_enabled ? 'active' : ''}`}
+                onClick={() => {
+                  if (settingsDraft.background_wake_enabled) {
+                    setSettingsDraft((prev) => ({ ...prev, background_wake_enabled: false }));
+                  } else {
+                    setWakeConsentOpen(true);
+                  }
+                }}
+              >
                 <Mic size={18}/>
                 <span>
                   <strong>Background Wake Mode {wakeRunning ? '· Active' : ''}</strong>
@@ -497,6 +508,54 @@ export default function Assistant() {
             </button>
           </div>
         </Surface>
+      )}
+
+      {wakeConsentOpen && (
+        <div className="modal-backdrop" onMouseDown={() => setWakeConsentOpen(false)}>
+          <div className="modal-card reset-card" onMouseDown={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="wake-consent-title">
+            <div className="modal-head">
+              <div>
+                <span>BACKGROUND VOICE ACCESS</span>
+                <h2 id="wake-consent-title">Enable “Hey {settingsDraft.assistant_name || 'Nova'}”?</h2>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setWakeConsentOpen(false)} aria-label="Close background wake disclosure">×</button>
+            </div>
+            <div className="settings-note">
+              <Mic size={20}/>
+              <div>
+                <strong>Microphone stays active while Wake Mode is on</strong>
+                <span>Android shows a persistent notification, and you can stop Wake Mode from that notification or this settings screen at any time.</span>
+              </div>
+            </div>
+            <div className="settings-note">
+              <Sparkles size={20}/>
+              <div>
+                <strong>Wake phrase detection is local after first setup</strong>
+                <span>The first enable downloads an offline speech model. “Hey {settingsDraft.assistant_name || 'Nova'}” detection then runs on this device.</span>
+              </div>
+            </div>
+            <div className="settings-note">
+              <Volume2 size={20}/>
+              <div>
+                <strong>Your command starts only after the wake phrase</strong>
+                <span>After wake, Android speech recognition transcribes the command; depending on your device it may use an Android speech service/network. The transcript is sent to Smart Expense to process your finance request or save a note. Smart Expense does not store raw microphone audio.</span>
+              </div>
+            </div>
+            <div className="assistant-command-actions">
+              <button type="button" className="button ghost" onClick={() => setWakeConsentOpen(false)}>Not now</button>
+              <button
+                type="button"
+                className="button primary"
+                onClick={() => {
+                  setSettingsDraft((prev) => ({ ...prev, background_wake_enabled: true }));
+                  setWakeConsentOpen(false);
+                }}
+              >
+                Enable Wake Mode
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <Surface className="assistant-console">
