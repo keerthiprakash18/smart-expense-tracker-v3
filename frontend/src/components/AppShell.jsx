@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, Bell, CircleDollarSign, LayoutDashboard, LogOut, MoreHorizontal, Moon, Plus, ReceiptText, RefreshCw, Settings, Sun, WalletCards, WandSparkles } from 'lucide-react';
+import { BarChart3, Bell, Bot, CircleDollarSign, LayoutDashboard, LogOut, MoreHorizontal, Moon, Plus, ReceiptText, RefreshCw, Settings, Sun, WalletCards, WandSparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useFinance } from '../context/FinanceContext';
 import { useTheme } from '../context/ThemeContext';
@@ -10,7 +10,7 @@ import api from '../services/api';
 const nav = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/transactions', label: 'Transactions', icon: WalletCards },
-  { to: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { to: '/analytics', label: 'Analytics', icon: BarChart3 },\n  { to: '/assistant', label: 'AI Assistant', icon: Bot },
   { to: '/money', label: 'Money Hub', icon: CircleDollarSign },
   { to: '/planner', label: 'Planner', icon: WandSparkles },
   { to: '/receipts', label: 'Receipt Vault', icon: ReceiptText },
@@ -60,6 +60,7 @@ export default function AppShell() {
       </header>
       <div className="page-wrap" key={location.pathname}><Outlet /></div>
     </main>
+    <button className="assistant-fab-shell" onClick={()=>navigate('/assistant')} aria-label="Open AI finance assistant" title="AI finance assistant"><Bot size={22}/><span>AI</span></button>
     <nav className="bottom-nav" aria-label="Mobile primary">
       <NavLink to="/" end><LayoutDashboard size={21}/><span>Home</span></NavLink>
       <NavLink to="/transactions"><WalletCards size={21}/><span>History</span></NavLink>
