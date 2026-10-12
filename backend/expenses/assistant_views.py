@@ -80,8 +80,8 @@ class AssistantMessageView(APIView):
             return Response({"error": "client_request_id must be a valid UUID."}, status=400)
 
         try:
-            command, _ = prepare_command(request.user, message, request_id)
-            return Response(serialize_command(command), status=201 if command.created_at == command.updated_at else 200)
+            command, created = prepare_command(request.user, message, request_id)
+            return Response(serialize_command(command), status=201 if created else 200)
         except AssistantError as exc:
             return Response({"error": str(exc)}, status=400)
 
