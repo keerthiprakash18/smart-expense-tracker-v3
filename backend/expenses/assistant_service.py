@@ -410,13 +410,35 @@ def _query_response(user, intent, payload):
 
     if intent in {"GET_BUDGET", "GET_BUDGET_STATUS"}:
         profile, _ = UserProfile.objects.get_or_create(user=user)
-        budget = Decimal(profile.monthly_budget or 0)
-        spent = expense_qs.filter(date__year=timezone.localdate().year, date__month=timezone.localdate().month).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        category = payload.get("category")
+        category_budget = None
+        if category:
+            category_budget = CategoryBudget.objects.filter(
+                user=user,
+                category__iexact=category,
+                active=True,
+                period="MONTHLY",
+            ).first()
+        budget = Decimal(category_budget.amount if category_budget else profile.monthly_budget or 0)
+        month_qs = expense_qs.filter(
+            date__year=timezone.localdate().year,
+            date__month=timezone.localdate().month,
+        )
+        if category_budget:
+            month_qs = month_qs.filter(category__iexact=category_budget.category)
+        spent = month_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
         remaining = max(Decimal("0"), budget - spent)
         percent = float((spent / budget * 100) if budget else 0)
+        label = category_budget.category if category_budget else "overall"
         return {
-            "message": f"This month you have spent {_fmt_money(user, spent)} of {_fmt_money(user, budget)}. {_fmt_money(user, remaining)} remains.",
-            "data": {"budget": float(budget), "spent": float(spent), "remaining": float(remaining), "percent": round(percent, 1)},
+            "message": f"Your {label} budget is {_fmt_money(user, budget)}. You've spent {_fmt_money(user, spent)} and {_fmt_money(user, remaining)} remains.",
+            "data": {
+                "category": category_budget.category if category_budget else None,
+                "budget": float(budget),
+                "spent": float(spent),
+                "remaining": float(remaining),
+                "percent": round(percent, 1),
+            },
         }
 
     if intent == "COMPARE_SPENDING":
