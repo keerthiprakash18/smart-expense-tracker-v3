@@ -1,4 +1,5 @@
-import decimal\nfrom django.conf import settings
+import decimal
+from django.conf import settings
 from django.db import migrations, models
 import django.db.models.deletion
 import django.utils.timezone
