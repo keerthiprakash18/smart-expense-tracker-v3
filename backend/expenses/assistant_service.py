@@ -593,7 +593,7 @@ def _cancel_superseded(command):
         command.save(update_fields=["status", "response_text", "updated_at"])
 
 
-def prepare_command(user, utterance, client_request_id):
+def prepare_command(user, utterance, client_request_id, source="TEXT"):
     text = _clean(utterance)
     if not text:
         raise AssistantError("Say or type a finance request first.")
@@ -612,6 +612,7 @@ def prepare_command(user, utterance, client_request_id):
     intent = parsed["intent"]
     confidence = float(parsed.get("confidence") or 0)
     payload = parsed.get("payload") or {}
+    payload["source"] = source if source in {"TEXT", "VOICE_APP", "VOICE_WAKE"} else "TEXT"
     profile, _ = AssistantProfile.objects.get_or_create(user=user)
 
     if superseded_command:
@@ -626,7 +627,7 @@ def prepare_command(user, utterance, client_request_id):
             raise AssistantError("Tell me what you want me to note.")
         if len(note_content) > 2000:
             raise AssistantError("Keep a single note under 2000 characters.")
-        source = "VOICE_WAKE" if payload.get("source") == "VOICE_WAKE" else "TEXT"
+        source = payload.get("source") if payload.get("source") in {"TEXT", "VOICE_APP", "VOICE_WAKE"} else "TEXT"
         note = AssistantNote.objects.create(
             user=user,
             content=note_content,
