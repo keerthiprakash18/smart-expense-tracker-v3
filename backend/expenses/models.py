@@ -506,3 +506,29 @@ class AssistantCommand(models.Model):
 
     def __str__(self):
         return f"{self.user.username}: {self.intent} ({self.status})"
+
+
+
+class AssistantNote(models.Model):
+    SOURCE_CHOICES = [
+        ("VOICE_WAKE", "Background voice wake"),
+        ("VOICE_APP", "In-app voice"),
+        ("TEXT", "Text"),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="assistant_notes")
+    content = models.TextField()
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default="TEXT")
+    is_done = models.BooleanField(default=False)
+    reminder_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["user", "is_done", "-created_at"], name="assist_note_user_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username}: {self.content[:50]}"
