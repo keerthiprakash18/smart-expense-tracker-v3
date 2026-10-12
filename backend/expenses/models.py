@@ -532,3 +532,26 @@ class AssistantNote(models.Model):
 
     def __str__(self):
         return f"{self.user.username}: {self.content[:50]}"
+
+
+
+class AssistantWakeToken(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="assistant_wake_tokens")
+    token_digest = models.CharField(max_length=64, unique=True, db_index=True)
+    expires_at = models.DateTimeField()
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["user", "revoked_at", "expires_at"], name="assist_wake_token_idx"),
+        ]
+
+    @property
+    def is_active(self):
+        return self.revoked_at is None and self.expires_at > timezone.now()
+
+    def __str__(self):
+        return f"{self.user.username} wake token"
