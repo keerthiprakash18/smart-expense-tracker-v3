@@ -1,9 +1,11 @@
 import React from 'react';
-import { BarChart3, Bell, ChevronRight, CircleDollarSign, ReceiptText, Settings } from 'lucide-react';
+import { BarChart3, Bell, Bot, ChevronRight, CircleDollarSign, ReceiptText, Settings, WandSparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, Surface } from '../components/Ui';
 
 const items = [
+  { to:'/assistant', title:'AI Assistant', text:'Speak or type expenses and finance questions', icon:Bot },
+  { to:'/planner', title:'Planner', text:'Budgets, recurring plans and future money actions', icon:WandSparkles },
   { to:'/analytics', title:'Analytics', text:'Full-ledger trends and category insights', icon:BarChart3 },
   { to:'/money', title:'Money Hub', text:'Borrowing, lending, bills and savings', icon:CircleDollarSign },
   { to:'/receipts', title:'Receipt Vault', text:'Review securely stored receipt records', icon:ReceiptText },

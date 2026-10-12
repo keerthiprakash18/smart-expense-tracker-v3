@@ -61,12 +61,11 @@ export default function AppShell() {
       </header>
       <div className="page-wrap" key={location.pathname}><Outlet /></div>
     </main>
-    <button className="assistant-fab-shell" onClick={()=>navigate('/assistant')} aria-label="Open AI finance assistant" title="AI finance assistant"><Bot size={22}/><span>AI</span></button>
     <nav className="bottom-nav" aria-label="Mobile primary">
       <NavLink to="/" end><LayoutDashboard size={21}/><span>Home</span></NavLink>
       <NavLink to="/transactions"><WalletCards size={21}/><span>History</span></NavLink>
       <button className="bottom-add" onClick={()=>navigate('/add')} aria-label="Add transaction"><Plus size={25}/></button>
-      <NavLink to="/planner"><WandSparkles size={21}/><span>Plan</span></NavLink>
+      <NavLink to="/assistant"><Bot size={21}/><span>AI</span></NavLink>
       <NavLink to="/more"><MoreHorizontal size={21}/><span>More</span></NavLink>
     </nav>
     {toast&&<div className={`toast ${toast.type==='error'?'error':''}`} role="status">{toast.message}</div>}
