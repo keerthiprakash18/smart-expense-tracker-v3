@@ -7,6 +7,8 @@ import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
 
+import androidx.core.content.ContextCompat;
+
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
@@ -52,6 +54,68 @@ public class NativeSpeechPlugin extends Plugin {
         } else {
             call.reject("MICROPHONE_PERMISSION_DENIED");
         }
+    }
+
+    @PluginMethod
+    public void startWakeMode(PluginCall call) {
+        if (getPermissionState("microphone") != PermissionState.GRANTED) {
+            requestPermissionForAlias("microphone", call, "wakeMicrophonePermissionCallback");
+            return;
+        }
+        beginWakeMode(call);
+    }
+
+    @PermissionCallback
+    private void wakeMicrophonePermissionCallback(PluginCall call) {
+        if (getPermissionState("microphone") == PermissionState.GRANTED) {
+            beginWakeMode(call);
+        } else {
+            call.reject("MICROPHONE_PERMISSION_DENIED");
+        }
+    }
+
+    private void beginWakeMode(PluginCall call) {
+        String assistantName = call.getString("assistantName", "Nova");
+        Intent intent = new Intent(getContext(), WakeWordService.class);
+        intent.setAction(WakeWordService.ACTION_START);
+        intent.putExtra(WakeWordService.EXTRA_ASSISTANT_NAME, assistantName);
+        try {
+            ContextCompat.startForegroundService(getContext(), intent);
+            JSObject result = new JSObject();
+            result.put("running", true);
+            result.put("wakePhrase", "Hey " + assistantName);
+            call.resolve(result);
+        } catch (Exception exception) {
+            call.reject("WAKE_MODE_START_FAILED", exception);
+        }
+    }
+
+    @PluginMethod
+    public void stopWakeMode(PluginCall call) {
+        Intent intent = new Intent(getContext(), WakeWordService.class);
+        intent.setAction(WakeWordService.ACTION_STOP);
+        try {
+            getContext().startService(intent);
+        } catch (Exception ignored) {
+            getContext().stopService(intent);
+        }
+        JSObject result = new JSObject();
+        result.put("running", false);
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void getWakeStatus(PluginCall call) {
+        boolean running = getContext()
+            .getSharedPreferences("assistant_wake", android.content.Context.MODE_PRIVATE)
+            .getBoolean("running", false);
+        String assistantName = getContext()
+            .getSharedPreferences("assistant_wake", android.content.Context.MODE_PRIVATE)
+            .getString("assistant_name", "Nova");
+        JSObject result = new JSObject();
+        result.put("running", running);
+        result.put("wakePhrase", "Hey " + assistantName);
+        call.resolve(result);
     }
 
     @PluginMethod

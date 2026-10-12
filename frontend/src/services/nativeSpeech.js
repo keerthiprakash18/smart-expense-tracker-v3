@@ -25,3 +25,19 @@ export async function stopNativeSpeech() {
 export async function cancelNativeSpeech() {
   return NativeSpeech.cancelListening();
 }
+
+
+export async function startBackgroundWake(assistantName = 'Nova') {
+  if (!isNativeAndroid()) throw new Error('BACKGROUND_WAKE_REQUIRES_NATIVE_ANDROID');
+  return NativeSpeech.startWakeMode({ assistantName });
+}
+
+export async function stopBackgroundWake() {
+  if (!isNativeAndroid()) return { running: false };
+  return NativeSpeech.stopWakeMode();
+}
+
+export async function getBackgroundWakeStatus() {
+  if (!isNativeAndroid()) return { running: false, wakePhrase: null };
+  return NativeSpeech.getWakeStatus();
+}

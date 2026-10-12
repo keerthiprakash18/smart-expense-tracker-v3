@@ -17,6 +17,8 @@ def serialize_profile(profile):
         "personality": profile.personality,
         "confirmation_mode": profile.confirmation_mode,
         "quick_add": profile.quick_add,
+        "background_wake_enabled": profile.background_wake_enabled,
+        "wake_phrase": f"Hey {profile.assistant_name}",
         "updated_at": profile.updated_at.isoformat() if profile.updated_at else None,
     }
 
@@ -56,7 +58,7 @@ class AssistantSettingsView(APIView):
                     return Response({"error": f"Invalid {field.replace('_', ' ')}."}, status=400)
                 setattr(profile, field, value)
 
-        for field in ("voice_responses", "quick_add"):
+        for field in ("voice_responses", "quick_add", "background_wake_enabled"):
             if field in request.data:
                 value = request.data.get(field)
                 if not isinstance(value, bool):

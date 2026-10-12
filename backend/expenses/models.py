@@ -453,6 +453,7 @@ class AssistantProfile(models.Model):
     personality = models.CharField(max_length=20, choices=PERSONALITY_CHOICES, default="FRIENDLY")
     confirmation_mode = models.CharField(max_length=20, choices=CONFIRMATION_CHOICES, default="SMART")
     quick_add = models.BooleanField(default=False)
+    background_wake_enabled = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
