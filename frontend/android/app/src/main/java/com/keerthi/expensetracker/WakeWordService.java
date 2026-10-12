@@ -292,11 +292,25 @@ public class WakeWordService extends Service implements TextToSpeech.OnInitListe
 
     private void sendWakeMessage(String transcript, int clarificationTurn) {
         worker.execute(() -> {
+            JSONObject payload = new JSONObject();
+            try {
+                payload.put("message", transcript);
+                payload.put("client_request_id", UUID.randomUUID().toString());
+            } catch (Exception error) {
+                handler.post(() -> {
+                    showActionNotification(
+                        "Command could not be prepared",
+                        "Tap to retry in Smart Expense.",
+                        transcript
+                    );
+                    resumeWakeMode();
+                });
+                return;
+            }
+
             HttpResult response = postJson(
                 "/api/v3/assistant/wake/message/",
-                new JSONObject()
-                    .put("message", transcript)
-                    .put("client_request_id", UUID.randomUUID().toString())
+                payload
             );
             handler.post(() -> handleAssistantResponse(response, transcript, clarificationTurn));
         });
