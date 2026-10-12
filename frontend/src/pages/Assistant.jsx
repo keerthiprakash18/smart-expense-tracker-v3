@@ -98,6 +98,7 @@ export default function Assistant() {
   const [settingsDraft, setSettingsDraft] = useState(defaultSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [savedNotes, setSavedNotes] = useState([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -143,8 +144,9 @@ export default function Assistant() {
     Promise.all([
       api.get('/api/v3/assistant/settings/'),
       api.get('/api/v3/assistant/history/').catch(() => ({ data: { results: [] } })),
+      api.get('/api/v3/assistant/notes/').catch(() => ({ data: { results: [] } })),
     ])
-      .then(([settingsRes, historyRes]) => {
+      .then(([settingsRes, historyRes, notesRes]) => {
         if (!live) return;
         const next = { ...defaultSettings, ...(settingsRes.data || {}) };
         setSettings(next);
@@ -159,6 +161,7 @@ export default function Assistant() {
           .filter((item) => item?.message)
           .map((item) => ({ id: `history-${item.id}`, role: 'assistant', text: item.message, command: item, historical: true }));
         setMessages(restored);
+        setSavedNotes(Array.isArray(notesRes.data?.results) ? notesRes.data.results : []);
       })
       .catch(() => {
         if (live) setMessages([{ id: 'boot-error', role: 'assistant', text: 'Assistant settings could not be loaded. You can still retry from this page.', error: true }]);
@@ -198,6 +201,14 @@ export default function Assistant() {
       });
       const command = response.data;
       pushAssistant(command);
+      if (command?.status === 'COMPLETED' && command?.intent === 'CREATE_NOTE' && command?.result?.note) {
+        setSavedNotes((prev) => [{
+          id: command.result.note_id,
+          content: command.result.note,
+          source: 'TEXT',
+          created_at: new Date().toISOString(),
+        }, ...prev].slice(0, 50));
+      }
       if (command?.status === 'COMPLETED' && ['CREATE_EXPENSE', 'CREATE_INCOME', 'UPDATE_TRANSACTION', 'DELETE_TRANSACTION'].includes(command.intent)) {
         await refresh();
       }
@@ -640,6 +651,31 @@ export default function Assistant() {
           <span className="privacy-dot"/>
           {wakeRunning ? `Background wake mode is active for “Hey ${settings.assistant_name}”. Android shows a persistent microphone notification.` : 'Push-to-talk is active. Raw microphone audio is not stored by Smart Expense.'}
         </div>
+      </Surface>
+
+      <Surface className="assistant-notes-panel">
+        <div className="section-heading">
+          <div><span>SAVED NOTES</span><h2>Quick captures</h2></div>
+          <small>{savedNotes.length ? `${savedNotes.length} saved` : 'Voice & text'}</small>
+        </div>
+        {savedNotes.length ? (
+          <div className="transaction-list detailed">
+            {savedNotes.slice(0, 8).map((note) => (
+              <div className="transaction-row" key={note.id}>
+                <span className="transaction-icon"><Sparkles size={17}/></span>
+                <span className="transaction-main">
+                  <strong>{note.content}</strong>
+                  <span>{note.source === 'VOICE_WAKE' ? 'Background voice capture' : note.source === 'VOICE_APP' ? 'In-app voice' : 'Assistant note'} · {note.created_at ? new Date(note.created_at).toLocaleString() : 'Saved'}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-state compact">
+            <Sparkles size={20}/>
+            <span>Say “Hey {settings.assistant_name}, remember this…” or type “note pannu” to save a quick note.</span>
+          </div>
+        )}
       </Surface>
     </div>
   );
