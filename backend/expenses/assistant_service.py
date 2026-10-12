@@ -477,6 +477,64 @@ def _find_candidate_transaction(user, payload, utterance, for_update=False):
     return None, "I found multiple possible transactions. Open Transactions and be more specific with the title/category/date."
 
 
+def _merge_recent_context(user, text, parsed):
+    """Resolve short follow-ups against a recent pending assistant command.
+
+    This keeps clarification/correction conversational without sending raw
+    finance history to an AI provider.
+    """
+    recent = (
+        AssistantCommand.objects.filter(
+            user=user,
+            status__in=["PENDING", "NEEDS_CLARIFICATION"],
+            created_at__gte=timezone.now() - timedelta(minutes=10),
+        )
+        .order_by("-created_at", "-id")
+        .first()
+    )
+    if not recent or recent.intent not in {"CREATE_EXPENSE", "CREATE_INCOME"}:
+        return parsed, None
+
+    base = dict(recent.safe_payload or {})
+    tx_type = "INCOME" if recent.intent == "CREATE_INCOME" else "EXPENSE"
+    changed = False
+    corrected_amount = _parse_amount(text)
+    category, category_confidence = resolve_category(user, text, tx_type)
+
+    # "500 illa 550" or "make it 550" corrects the pending amount.
+    if corrected_amount is not None and (
+        not base.get("amount") or _contains_any(text, UPDATE_WORDS) or len(text.split()) <= 4
+    ):
+        base["amount"] = str(corrected_amount)
+        changed = True
+
+    # A short "Food" / "Transport" reply answers a category clarification.
+    if category and category_confidence >= 0.8 and (
+        not base.get("category") or len(text.split()) <= 4
+    ):
+        base["category"] = category
+        if not base.get("title") or base.get("title") in {"Expense", "General"}:
+            base["title"] = _title_from_text(text, category, tx_type)
+        changed = True
+
+    if not changed:
+        return parsed, None
+
+    if base.get("amount") and (recent.intent == "CREATE_INCOME" or base.get("category")):
+        confidence = max(float(parsed.get("confidence") or 0), 0.94)
+    else:
+        confidence = max(float(parsed.get("confidence") or 0), 0.7)
+    base["language"] = detect_language(text) if text else base.get("language", "EN")
+    return {"intent": recent.intent, "confidence": confidence, "payload": base}, recent
+
+
+def _cancel_superseded(command):
+    if command and command.status in {"PENDING", "NEEDS_CLARIFICATION"}:
+        command.status = "CANCELLED"
+        command.response_text = "Superseded by your latest assistant instruction."
+        command.save(update_fields=["status", "response_text", "updated_at"])
+
+
 def prepare_command(user, utterance, client_request_id):
     text = _clean(utterance)
     if not text:
@@ -489,10 +547,14 @@ def prepare_command(user, utterance, client_request_id):
         return existing, False
 
     parsed = parse_command(user, text)
+    parsed, superseded_command = _merge_recent_context(user, text, parsed)
     intent = parsed["intent"]
     confidence = float(parsed.get("confidence") or 0)
     payload = parsed.get("payload") or {}
     profile, _ = AssistantProfile.objects.get_or_create(user=user)
+
+    if superseded_command:
+        _cancel_superseded(superseded_command)
 
     if intent not in SUPPORTED_INTENTS:
         raise AssistantError("That action is not supported yet.")
@@ -544,7 +606,28 @@ def prepare_command(user, utterance, client_request_id):
             return command, True
 
     if intent in {"UPDATE_TRANSACTION", "DELETE_TRANSACTION"}:
-        target, error = _find_candidate_transaction(user, payload, text)
+        target = None
+        error = None
+        # Natural corrections like "500 illa 550" should refer to the most
+        # recent assistant-created transaction when that reference is fresh.
+        recent_executed = (
+            AssistantCommand.objects.filter(
+                user=user,
+                status="COMPLETED",
+                transaction__isnull=False,
+                created_at__gte=timezone.now() - timedelta(minutes=10),
+            )
+            .select_related("transaction")
+            .order_by("-created_at", "-id")
+            .first()
+        )
+        if recent_executed and (
+            (intent == "UPDATE_TRANSACTION" and payload.get("corrected_amount"))
+            or (intent == "DELETE_TRANSACTION" and len(text.split()) <= 5)
+        ):
+            target = recent_executed.transaction
+        else:
+            target, error = _find_candidate_transaction(user, payload, text)
         if error:
             command = AssistantCommand.objects.create(
                 user=user,
