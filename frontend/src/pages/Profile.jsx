@@ -5,6 +5,7 @@ import { getAIStatus, retrainModel } from '../services/ai';
 import { PageHeader, Surface, money } from '../components/Ui';
 import { useFinance } from '../context/FinanceContext';
 import { useTheme } from '../context/ThemeContext';
+import { isSupabaseMode } from '../services/supabaseClient';
 
 const accountIcons = { BANK: Landmark, UPI: Smartphone, CASH: Wallet, CARD: CreditCard, WALLET: Wallet, CUSTOM: Wallet };
 
@@ -103,7 +104,7 @@ function AIModelCard({notify}) {
 }
 
 
-function SecurityCenter({notify}) {
+function SecurityCenter({notify,profile}) {
   const [status,setStatus]=useState({two_factor_enabled:false,recovery_codes_remaining:0});
   const [loading,setLoading]=useState(false);
   const [setup,setSetup]=useState(null);
@@ -114,12 +115,18 @@ function SecurityCenter({notify}) {
   const [showManualKey,setShowManualKey]=useState(false);
   const [recoveryCodes,setRecoveryCodes]=useState([]);
   const [disableForm,setDisableForm]=useState({password:'',code:''});
+  const [statusLoaded,setStatusLoaded]=useState(false);
+  const [loadError,setLoadError]=useState('');
 
   const load=async()=>{
+    if(isSupabaseMode)setLoadError('');
     try{
       const r=await api.get('/api/v3/security/');
       setStatus(r.data||{});
-    }catch{}
+      setStatusLoaded(true);
+    }catch(err){
+      if(isSupabaseMode){setStatusLoaded(false);setLoadError(err.response?.data?.error||'Unable to verify your security settings. Retry before making changes.');}
+    }
   };
   useEffect(()=>{load()},[]);
 
@@ -145,7 +152,7 @@ function SecurityCenter({notify}) {
     setLoading(true);
     try{
       const r=await api.post('/api/v3/security/2fa/confirm/',{code});
-      setRecoveryCodes(r.data?.recovery_codes||[]);
+      setRecoveryCodes(isSupabaseMode?[]:r.data?.recovery_codes||[]);
       setSetup(null);
       setCode('');
       notify('Two-factor authentication enabled');
@@ -158,7 +165,8 @@ function SecurityCenter({notify}) {
   const disable2fa=async(e)=>{
     e.preventDefault();
     const {password,code:codeValue}=disableForm;
-    if(!password||!codeValue){notify('Enter your password and an authenticator or recovery code','error');return}
+    if(!password||!codeValue){notify(isSupabaseMode?'Enter your password and a current authenticator code':'Enter your password and an authenticator or recovery code','error');return}
+    if(isSupabaseMode&&!/^\d{6}$/.test(codeValue)){notify('Enter the current 6-digit authenticator code. Legacy recovery codes are not supported.','error');return}
     setLoading(true);
     try{
       await api.post('/api/v3/security/2fa/disable/',{password,code:codeValue});
@@ -186,11 +194,12 @@ function SecurityCenter({notify}) {
         <div>
           <span>SECURITY CENTER</span>
           <h2>Two-factor authentication</h2>
-          <p>Optional extra protection. Normal login continues to work without email verification.</p>
+          <p>{isSupabaseMode?'Protect your confirmed email account with an authenticator. Email recovery never bypasses enabled MFA.':'Optional extra protection. Normal login continues to work without email verification.'}</p>
         </div>
         <ShieldCheck size={20}/>
       </div>
 
+      {isSupabaseMode&&loadError&&<div className="alert error" role="alert">{loadError} <button type="button" className="text-button" onClick={load}>Retry security check</button></div>}
       <div className="security-grid">
         <div className="security-item">
           <div>
@@ -198,15 +207,15 @@ function SecurityCenter({notify}) {
             <span>
               <strong>Authenticator 2FA</strong>
               <small>
-                {status.two_factor_enabled
-                  ? 'Enabled • ' + (status.recovery_codes_remaining||0) + ' recovery codes left'
+                {isSupabaseMode&&!statusLoaded?'Security status not yet verified':status.two_factor_enabled
+                  ? (isSupabaseMode?'Enabled • authenticator verification required':'Enabled • ' + (status.recovery_codes_remaining||0) + ' recovery codes left')
                   : 'Disabled — optional'}
               </small>
             </span>
           </div>
           <button
             className={'button ' + (status.two_factor_enabled?'ghost':'primary')}
-            disabled={loading}
+            disabled={loading||(isSupabaseMode&&(!statusLoaded||(status.two_factor_enabled&&!status.mfa_disable_supported)))}
             onClick={status.two_factor_enabled?()=>setDisableOpen(true):start2fa}
           >
             {status.two_factor_enabled?'Disable 2FA':'Enable 2FA'}
@@ -217,10 +226,12 @@ function SecurityCenter({notify}) {
       <div className="settings-note">
         <ShieldCheck size={20}/>
         <div>
-          <strong>No email code is required for normal login</strong>
-          <span>Email verification and password-reset email are temporarily hidden until a reliable mail provider is configured.</span>
+          <strong>{isSupabaseMode?(statusLoaded?(status.email_verified?'Email confirmed':'Email confirmation required'):'Checking email confirmation'):'No email code is required for normal login'}</strong>
+          <span>{isSupabaseMode?'Password-reset emails are available from the sign-in page. This app does not issue or accept legacy recovery codes. Keep access to your authenticator; contact the project administrator if it is lost.':'Email verification and password-reset email are temporarily hidden until a reliable mail provider is configured.'}</span>
+          {isSupabaseMode&&statusLoaded&&!status.email_verified&&<button className="text-button" type="button" disabled={loading} onClick={async()=>{setLoading(true);try{const result=await api.post('/api/resend-confirmation/',{email:profile?.email});notify(result.data.message)}catch(err){notify(err.response?.data?.error||'Unable to send confirmation email','error')}finally{setLoading(false)}}}>Resend confirmation email</button>}
         </div>
       </div>
+      {isSupabaseMode&&statusLoaded&&status.two_factor_enabled&&!status.mfa_disable_supported&&<p>This account has multiple or non-TOTP factors. Manage those factors with your project administrator; this screen can disable one TOTP authenticator only.</p>}
     </Surface>
 
     {setup&&
@@ -234,6 +245,7 @@ function SecurityCenter({notify}) {
           <div className="alert success">
             The 6-digit code is NOT sent by email or SMS. Google Authenticator / Microsoft Authenticator generates it on your phone every 30 seconds.
           </div>
+          {isSupabaseMode&&<p>No recovery codes will be generated. Keep access to this authenticator: a password-reset email will not remove MFA.</p>}
 
           <div style={{display:'grid',placeItems:'center',padding:'12px 0'}}>
             <img
@@ -278,7 +290,7 @@ function SecurityCenter({notify}) {
       </div>
     }
 
-    {recoveryCodes.length>0&&
+    {!isSupabaseMode&&recoveryCodes.length>0&&
       <div className="modal-backdrop">
         <div className="modal-card">
           <div className="modal-head"><div><span>RECOVERY CODES</span><h2>Save these codes now</h2></div></div>
@@ -293,12 +305,12 @@ function SecurityCenter({notify}) {
     }
 
     {status.two_factor_enabled&&disableOpen&&
-      <div className="modal-backdrop" onMouseDown={()=>setDisableForm({password:'',code:''})}>
+      <div className="modal-backdrop" onMouseDown={()=>{setDisableForm({password:'',code:''});if(isSupabaseMode)setDisableOpen(false)}}>
         <form className="modal-card" onMouseDown={(e)=>e.stopPropagation()} onSubmit={disable2fa}>
           <div className="modal-head"><div><span>DISABLE 2FA</span><h2>Turn off two-factor authentication</h2></div><button type="button" className="icon-button" aria-label="Close dialog" onClick={()=>{setDisableForm({password:'',code:''});setDisableOpen(false)}}>×</button></div>
-          <div className="settings-note"><ShieldCheck size={20}/><div><strong>Confirm your identity</strong><span>Enter your password plus a current authenticator code or a recovery code.</span></div></div>
+          <div className="settings-note"><ShieldCheck size={20}/><div><strong>Confirm your identity</strong><span>{isSupabaseMode?'Enter your current password plus a current 6-digit authenticator code. Legacy recovery codes cannot be used.':'Enter your password plus a current authenticator code or a recovery code.'}</span></div></div>
           <label><span>Current password</span><input required type="password" value={disableForm.password} onChange={(e)=>setDisableForm((p)=>({...p,password:e.target.value}))} autoComplete="current-password"/></label>
-          <label><span>Authenticator or recovery code</span><input required inputMode="text" value={disableForm.code} onChange={(e)=>setDisableForm((p)=>({...p,code:e.target.value}))} placeholder="123456 or ABCDE-FGHIJ" autoComplete="one-time-code"/></label>
+          <label><span>{isSupabaseMode?'Authenticator code':'Authenticator or recovery code'}</span><input required inputMode={isSupabaseMode?'numeric':'text'} maxLength={isSupabaseMode?6:undefined} pattern={isSupabaseMode?'[0-9]{6}':undefined} value={disableForm.code} onChange={(e)=>setDisableForm((p)=>({...p,code:isSupabaseMode?e.target.value.replace(/\D/g,'').slice(0,6):e.target.value}))} placeholder={isSupabaseMode?'123456':'123456 or ABCDE-FGHIJ'} autoComplete="one-time-code"/></label>
           <button className="button primary full" disabled={loading}>{loading?'Disabling…':'Disable 2FA'}</button>
         </form>
       </div>
@@ -308,6 +320,40 @@ function SecurityCenter({notify}) {
 
 
 function DangerZone({notify}) {
+  return isSupabaseMode?<SupabaseDangerZone notify={notify}/>:<LegacyDangerZone notify={notify}/>;
+}
+
+function SupabaseDangerZone({notify}) {
+  const [open,setOpen]=useState(false);
+  const [password,setPassword]=useState('');
+  const [confirmation,setConfirmation]=useState('');
+  const [deleting,setDeleting]=useState(false);
+  const [error,setError]=useState('');
+  const remove=async(event)=>{
+    event.preventDefault();setError('');setDeleting(true);
+    try{
+      await api.post('/api/delete-account/',{password,confirmation});
+      clearTokens();window.location.hash='#/login';window.location.reload();
+    }catch(err){
+      const message=err.response?.data?.error||'Unable to delete your account. Check its current status before retrying.';
+      setError(message);
+      if(err.response?.data?.account_deleted){notify(message,'error');clearTokens();window.location.hash='#/login';window.location.reload();}
+    }finally{setPassword('');setDeleting(false)}
+  };
+  return <Surface>
+    <div className="section-heading"><div><span>DANGER ZONE</span><h2>Delete account & data</h2><p>Permanently deletes this Supabase account, its app records and private receipts. Export a backup first if you need one.</p></div><ShieldCheck size={20}/></div>
+    <p>Your current password is verified on the server. Enabled MFA must already be verified in this session. The original Django account and database are separate.</p>
+    {!open?<button className="button ghost" onClick={()=>setOpen(true)}>Delete my account</button>:<form onSubmit={remove}>
+      {error&&<div className="alert error" role="alert">{error}</div>}
+      <label><span>Current password for account deletion</span><input required type="password" autoComplete="current-password" value={password} onChange={(e)=>setPassword(e.target.value)} disabled={deleting}/></label>
+      <label><span>Type DELETE to confirm</span><input required pattern="DELETE" autoComplete="off" value={confirmation} onChange={(e)=>setConfirmation(e.target.value)} disabled={deleting}/></label>
+      <button className="button ghost" disabled={deleting||confirmation!=='DELETE'}>{deleting?'Deleting account…':'Permanently delete account'}</button>
+      <button type="button" className="text-button" disabled={deleting} onClick={()=>{setOpen(false);setPassword('');setConfirmation('');setError('')}}>Cancel</button>
+    </form>}
+  </Surface>;
+}
+
+function LegacyDangerZone({notify}) {
   const [deleting,setDeleting]=useState(false);
   const deleteAccount=async()=>{
     if(!window.confirm('This permanently deletes your Smart Expense account and finance data. Continue?')) return;

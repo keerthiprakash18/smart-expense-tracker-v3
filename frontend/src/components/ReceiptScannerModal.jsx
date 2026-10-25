@@ -1,6 +1,8 @@
 ﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Camera, Upload, RotateCcw, X, ScanLine, CheckCircle2 } from 'lucide-react';
 import api from '../services/api';
+import { isSupabaseMode } from '../services/supabaseClient';
+import { readReceiptFile } from '../services/receiptOcrLimits';
 
 const EMPTY_RESULT = {
   merchant: '',
@@ -25,11 +27,14 @@ export default function ReceiptScannerModal({
   isOpen,
   onClose,
   accounts = [],
+  currency = '₹',
   onConfirmExpense
 }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const fileInputRef = useRef(null);
+  const scanControllerRef = useRef(null);
+  const scanSequenceRef = useRef(0);
 
   const [mode, setMode] = useState('choose');
   const [previewUrl, setPreviewUrl] = useState('');
@@ -43,6 +48,8 @@ export default function ReceiptScannerModal({
   const [accountId, setAccountId] = useState(() => accounts[0]?.id ? String(accounts[0].id) : '');
   const [notes, setNotes] = useState('Scanned Document');
   const [duplicateMatch, setDuplicateMatch] = useState(null);
+  const [warnings, setWarnings] = useState([]);
+  const [scanProgress, setScanProgress] = useState('');
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -53,6 +60,7 @@ export default function ReceiptScannerModal({
   }, []);
 
   const retake = useCallback(() => {
+    if (isSupabaseMode) { scanControllerRef.current?.abort(); ++scanSequenceRef.current; setLoading(false); }
     stopCamera();
     setError('');
     setResult(EMPTY_RESULT);
@@ -62,15 +70,18 @@ export default function ReceiptScannerModal({
     });
     setSelectedFile(null);
     setDuplicateMatch(null);
+    setWarnings([]);
+    setScanProgress('');
     setMode('choose');
   }, [stopCamera]);
 
   useEffect(() => {
     if (!isOpen) {
+      if (isSupabaseMode) { scanControllerRef.current?.abort(); ++scanSequenceRef.current; }
       stopCamera();
       return undefined;
     }
-    return () => stopCamera();
+    return () => { stopCamera(); if (isSupabaseMode) { scanControllerRef.current?.abort(); ++scanSequenceRef.current; } };
   }, [isOpen, stopCamera]);
 
   const startCamera = async () => {
@@ -102,16 +113,16 @@ export default function ReceiptScannerModal({
   };
 
   const createPreview = (file) => {
-    if (!file) return;
+    if (!file) return false;
     const isPdf = file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf');
     const isImage = file.type.startsWith('image/');
     if (!isImage && !isPdf) {
       setError('Please select a receipt image or PDF.');
-      return;
+      return false;
     }
     if (file.size > 10 * 1024 * 1024) {
       setError('Receipt image must be 10MB or smaller.');
-      return;
+      return false;
     }
 
     stopCamera();
@@ -122,12 +133,25 @@ export default function ReceiptScannerModal({
     setSelectedFile(file);
     setMode('preview');
     setError('');
+    return true;
   };
 
-  const handleFileChange = (event) => {
+  const handleFileChange = async (event) => {
     const file = event.target.files?.[0];
-    if (file) { createPreview(file); scanReceipt(file); }
     event.target.value = '';
+    if (!file) return;
+    if (isSupabaseMode) {
+      // Validate the original dimensions before an <img> preview can decode a
+      // compressed pixel bomb. OCR repeats this check at its public boundary.
+      const sequence = ++scanSequenceRef.current;
+      try {
+        const data = new FormData(); data.append('receipt', file);
+        await readReceiptFile(data);
+        if (sequence !== scanSequenceRef.current) return;
+      } catch (error) { if (sequence === scanSequenceRef.current) setError(error.message); return; }
+    }
+    const valid = createPreview(file);
+    if (!isSupabaseMode || valid) scanReceipt(file);
   };
 
   const capturePhoto = () => {
@@ -167,13 +191,23 @@ export default function ReceiptScannerModal({
     setLoading(true);
     setError('');
     setDuplicateMatch(null);
+    setWarnings([]);
+    setScanProgress('');
+    const sequence = ++scanSequenceRef.current;
+    const controller = isSupabaseMode ? new AbortController() : null;
+    if (isSupabaseMode) { scanControllerRef.current?.abort(); scanControllerRef.current = controller; }
     try {
       const formData = new FormData();
       formData.append('receipt', targetFile, targetFile.name);
 
       const response = await api.post('/api/scan-receipt/', formData, {
-        timeout: 90000
+        timeout: 90000,
+        ...(isSupabaseMode ? { signal: controller.signal, onOcrProgress: (event) => {
+          if (sequence === scanSequenceRef.current) setScanProgress(event.page ? `${event.status} ${event.page}/${event.pages}` : `${event.status}${event.status === 'recognizing text' ? ` ${Math.round((event.progress || 0) * 100)}%` : ''}`);
+        } } : {})
       });
+
+      if (isSupabaseMode && (controller.signal.aborted || sequence !== scanSequenceRef.current)) return;
 
       const parsed = response.data?.parsed_data || {};
       setResult({
@@ -183,12 +217,18 @@ export default function ReceiptScannerModal({
         date: formatDateForInput(parsed.date)
       });
       setDuplicateMatch(response.data?.is_duplicate ? response.data?.duplicate_match || {} : null);
+      if (isSupabaseMode) {
+        const reviewWarnings = (response.data?.warnings || parsed.warnings || []).filter((message) => typeof message === 'string');
+        if (parsed.currency && parsed.currency !== currency) reviewWarnings.unshift(`Receipt currency ${parsed.currency_code || parsed.currency} differs from workspace currency ${currency}. No currency conversion was performed; correct the amount before saving.`);
+        setWarnings(reviewWarnings.slice(0, 12));
+      }
       setMode('result');
     } catch (err) {
+      if (isSupabaseMode && (controller.signal.aborted || sequence !== scanSequenceRef.current)) return;
       const message = err.response?.data?.detail ? `${err.response?.data?.error || 'Receipt scanning failed.'} ${err.response.data.detail}` : err.response?.data?.error || 'Receipt scanning failed. Please try another clear receipt image.';
       setError(message);
     } finally {
-      setLoading(false);
+      if (!isSupabaseMode || sequence === scanSequenceRef.current) setLoading(false);
     }
   };
 
@@ -276,6 +316,8 @@ export default function ReceiptScannerModal({
         </div>
 
         {error && <div className="alert error">{error}</div>}
+        {isSupabaseMode && <p>Processed on this device using local OCR. JPEG, PNG, static WebP or PDF • 10 MiB • PDF maximum 3 pages. Receipt content is not sent to an OCR provider; saving uploads the attachment to your private storage.</p>}
+        {isSupabaseMode && loading && <div className="alert info" role="status" aria-live="polite">{scanProgress || 'Preparing local receipt scanner…'}</div>}
 
         {mode === 'choose' && (
           <div className="scanner-choose">
@@ -292,7 +334,7 @@ export default function ReceiptScannerModal({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*,application/pdf"
+              accept={isSupabaseMode ? 'image/jpeg,image/png,image/webp,application/pdf' : 'image/*,application/pdf'}
               onChange={handleFileChange}
               style={{ display: 'none' }}
             />
@@ -328,10 +370,13 @@ export default function ReceiptScannerModal({
 
         {mode === 'result' && (
           <div>
-            <div className="alert success"><CheckCircle2 size={18} /> Receipt scanned automatically. Verify the fields before saving.</div>
+            <div className="alert success"><CheckCircle2 size={18} /> {isSupabaseMode?'Local extraction finished. Review the suggestions and warnings before saving.':'Receipt scanned automatically. Verify the fields before saving.'}</div>
+            {isSupabaseMode && warnings.map((warning, index) => <div key={index} className="alert warning"><AlertTriangle size={16}/>{warning}</div>)}
             {duplicateMatch && <div className="alert warning"><AlertTriangle size={16} /> Possible duplicate: {duplicateMatch.title || 'existing transaction'} • {duplicateMatch.date || ''} • {duplicateMatch.amount || ''}</div>}
             <div className="scanner-meta">
               <span className="meta-pill">Confidence <strong>{Math.round(Number(result.confidence?.overall || 0) * 100)}%</strong></span>
+              {isSupabaseMode && <span className="meta-pill">Confidence type <strong>Heuristic suggestion</strong></span>}
+              {isSupabaseMode && result.currency && <span className="meta-pill">Receipt currency <strong>{result.currency_code || result.currency}</strong></span>}
               {result.merchant_memory && <span className="meta-pill">Merchant memory <strong>Matched</strong></span>}
               {result.ai_category && !result.merchant_memory && <span className="meta-pill">AI <strong>{result.ai_category} · {Math.round(Number(result.ai_confidence || 0) * 100)}%</strong></span>}
               {result.tax_amount > 0 && <span className="meta-pill">Tax <strong>{result.tax_amount}</strong></span>}

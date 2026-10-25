@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Local receipt OCR test</title></head>
+<body><p>Offline-network receipt OCR test harness.</p>
+<script type="module">
+  import { scanReceipt } from '../src/services/receiptOcr.js';
+  window.scanReceipt = scanReceipt;
+  window.ocrReady = true;
+</script></body></html>

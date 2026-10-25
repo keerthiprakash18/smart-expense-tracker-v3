@@ -28,3 +28,7 @@ frontend/.env.production
 .DS_Store
 Thumbs.db
 *.log
+
+.vercel
+frontend/test-results/
+supabase/.temp/

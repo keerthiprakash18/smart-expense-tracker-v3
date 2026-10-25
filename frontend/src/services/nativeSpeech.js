@@ -1,5 +1,6 @@
 import api, { API_BASE_URL } from './api';
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { isSupabaseMode } from './supabaseClient.js';
 
 const NativeSpeech = registerPlugin('NativeSpeech');
 
@@ -29,6 +30,7 @@ export async function cancelNativeSpeech() {
 
 
 export async function startBackgroundWake(assistantName = 'Nova', language = 'AUTO') {
+  if (isSupabaseMode) throw new Error('Background wake needs a new native Supabase bridge. Use in-app voice instead.');
   if (!isNativeAndroid()) throw new Error('BACKGROUND_WAKE_REQUIRES_NATIVE_ANDROID');
   const tokenResponse = await api.post('/api/v3/assistant/wake-token/', {});
   const wakeToken = tokenResponse?.data?.token;
@@ -50,5 +52,10 @@ export async function stopBackgroundWake() {
 
 export async function getBackgroundWakeStatus() {
   if (!isNativeAndroid()) return { running: false, wakePhrase: null };
+  if (isSupabaseMode) {
+    // Stop a legacy service before it can send a stored Railway wake token.
+    await NativeSpeech.stopWakeMode();
+    return { running: false, wakePhrase: null, supported: false };
+  }
   return NativeSpeech.getWakeStatus();
 }

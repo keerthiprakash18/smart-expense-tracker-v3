@@ -1,5 +1,7 @@
 import axios from "axios";
 import { Capacitor } from "@capacitor/core";
+import { isSupabaseMode, supabase } from './supabaseClient.js';
+import supabaseApi from './supabaseApi.js';
 
 const AUTH_STORAGE_VERSION = "2026-10-11-auth-routing-v2";
 const storedAuthVersion = localStorage.getItem("smart_expense_auth_version");
@@ -14,7 +16,7 @@ const nativeFallback = "https://smart-expense-tracker-v3-production.up.railway.a
 
 // Web production stays same-origin through Vercel rewrites so the HttpOnly
 // refresh cookie is first-party. Native Capacitor builds use VITE_API_URL.
-export const API_BASE_URL = Capacitor.isNativePlatform()
+export const API_BASE_URL = isSupabaseMode ? '' : Capacitor.isNativePlatform()
   ? (configuredBaseUrl || nativeFallback)
   : (import.meta.env.DEV ? configuredBaseUrl : "");
 
@@ -25,8 +27,13 @@ const api = axios.create({
   headers: { "X-Requested-With": "XMLHttpRequest" },
 });
 
-export const getAccessToken = () => localStorage.getItem("access_token");
+let supabaseAccessToken = null;
+if (supabase) {
+  supabase.auth.onAuthStateChange((_event, session) => { supabaseAccessToken = session?.access_token || null; });
+}
+export const getAccessToken = () => isSupabaseMode ? supabaseAccessToken : localStorage.getItem("access_token");
 export const setTokens = (accessToken) => {
+  if (isSupabaseMode) return; // The SDK owns Supabase sessions, not Django storage.
   if (accessToken) localStorage.setItem("access_token", accessToken);
 };
 export const clearTokens = () => {
@@ -51,6 +58,7 @@ api.interceptors.request.use((config) => {
 let refreshPromise = null;
 
 export const refreshAccessToken = async () => {
+  if (isSupabaseMode) return (await supabaseApi.post('/api/token/refresh/')).data.access;
   if (!refreshPromise) {
     refreshPromise = axios
       .post(`${API_BASE_URL}/api/token/refresh/`, {}, {
@@ -95,4 +103,4 @@ api.interceptors.response.use(
   }
 );
 
-export default api;
+export default isSupabaseMode ? supabaseApi : api;

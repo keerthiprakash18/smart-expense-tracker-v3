@@ -6,6 +6,7 @@ import ProtectedRoute from './ProtectedRoute';
 
 const Login = lazy(() => import('../pages/Login'));
 const Register = lazy(() => import('../pages/Register'));
+const AuthRecovery = lazy(() => import('../pages/AuthRecovery'));
 const Overview = lazy(() => import('../pages/Overview'));
 const Transactions = lazy(() => import('../pages/Transactions'));
 const TransactionEditor = lazy(() => import('../pages/TransactionEditor'));
@@ -39,6 +40,7 @@ export default function AppRouter() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/reset-password" element={<AuthRecovery />} />
         <Route path="/privacy" element={<Legal type="privacy" />} />
         <Route path="/terms" element={<Legal type="terms" />} />
         <Route element={<ProtectedApp />}>

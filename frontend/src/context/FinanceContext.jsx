@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
+import { isSupabaseMode } from '../services/supabaseClient';
 
 const FinanceContext = createContext(null);
 
@@ -56,6 +57,9 @@ export function FinanceProvider({ children }) {
     if (silent) setRefreshing(true); else setLoading(true);
     setError('');
     try {
+      // Supabase's atomic RPC is idempotent under concurrent StrictMode loads.
+      // This processes due rules on use; it is not an offline scheduler.
+      if (isSupabaseMode) await api.post('/api/v3/recurring/process/', {});
       const [profileRes, accountsRes, txRes, summaryRes] = await Promise.all([
         api.get('/api/profile/'),
         api.get('/api/accounts/'),
