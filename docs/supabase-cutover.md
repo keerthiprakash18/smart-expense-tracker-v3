@@ -1,10 +1,18 @@
-# Supabase cutover — local implementation, not deployed
+# Supabase cutover — deployed Supabase mode
 
 ## Current boundary
 
-The existing Django/Railway mode remains the default. No remote migration, GitHub
-push, Vercel deployment, database deletion, data import, or credential rotation
-was performed. The user wants a fresh Supabase backend, not Railway data migration.
+The existing Django/Railway mode remains the default for local builds. The fresh
+Supabase backend is deployed for the Vercel project below. The existing Railway
+database, accounts, data and deployment were not migrated, deleted or modified.
+
+Deployment receipts (October 26, 2026):
+
+- Supabase project: `ipaywszupvkckafzgite` (`smart-expense-tracker`)
+- Vercel production: `https://smart-expense-tracker-v3.vercel.app`
+- Vercel production deployment: `dpl_AKRbByHPyfrxA2FAyQpz1P1cVCLb`
+- Vercel preview deployment: `https://smart-expense-tracker-v3-ggkhpm4ym-luciferkp.vercel.app`
+- Git branch/commit: `feat/supabase-vercel-cutover` / `2211406`
 
 Opt in to the new backend at frontend build time:
 
@@ -57,24 +65,38 @@ not general `unsafe-eval`.
 - Account deletion requires deploying the `delete-account` Edge Function and its
   exact allowed origins. Full Auth/Storage/Edge HTTP behavior must be checked live.
 
-## Approval-gated deployment sequence
+## Completed remote setup
 
-1. Verify the selected Supabase project and inspect any existing tables. Dashboard
-   "No migrations" does not prove the database contains no Django tables.
-2. After approval, apply `supabase/migrations/20261025000100...00900` in order using
-   the Supabase CLI migration workflow. Never apply the `supabase/tests/bootstrap.sql`
-   fixtures remotely. New `tracker_*` tables do not import or remove Django tables.
-3. Configure Auth site URL, confirmation/recovery redirects, and email delivery as
-   described in `docs/auth-supabase.md`; do not disable confirmations merely to pass
-   a test. Deploy `delete-account` with server-only credentials and allowed origins.
-4. Publish a reviewed branch/PR only after permission. Set the three public build
-   variables for a **Vercel preview first**; keep production unchanged.
-5. On that preview create two test accounts, verify email and sign in. Create an
-   expense, refresh and sign out/in. Verify it remains only in the correct account.
-   Test transfers/repayment rollback, receipt upload/download, MFA and recovery.
-6. Only after live checks and acceptance of the parity limits above, approve the
-   production cutover. Set the same public variables and rebuild production.
-   Already-installed Android builds still require an updated native build.
+1. Nine versioned migrations were applied to the Supabase project in order. Local
+   test fixtures were not applied remotely; the migrations create the new
+   `tracker_*` schema without importing or removing Django tables.
+2. The `delete-account` Edge Function was deployed. Its server-only secrets are
+   configured, and `AUTH_ALLOWED_ORIGINS` includes the production and preview
+   origins. Gateway JWT verification is disabled for this function because the
+   handler performs the Auth-validated token checks and origin policy itself. An
+   OPTIONS request from production returned `204` with the expected CORS headers;
+   unauthenticated production POST returned `401`, and a disallowed origin
+   returned `403`.
+3. Supabase Auth has Email enabled and Confirm email enabled.
+4. Supabase Auth Site URL is the production Vercel origin. The production and
+   preview login/recovery redirect URLs are allowlisted.
+5. Vercel Production and Preview contain only the public Supabase build settings
+   required by the browser: provider, project URL and publishable key. The
+   service-role/secret key was not placed in a `VITE_*` variable.
+6. The reviewed implementation was committed and pushed to GitHub, then deployed
+   Preview-first and promoted to the production domain.
+
+## Live verification status
+
+- Production and Preview both render the Supabase-mode login screen.
+- Production Vercel deployment completed with `READY` status and the production
+  alias was assigned.
+- Local security, migration, finance, Auth and browser suites passed as listed
+  below.
+- A real email signup/login/expense round-trip is still pending because it needs a
+  user-controlled mailbox confirmation. Mocked browser tests are not evidence of
+  that live Auth flow.
+- Already-installed Android builds still require an updated native build.
 
 ## Verification commands
 

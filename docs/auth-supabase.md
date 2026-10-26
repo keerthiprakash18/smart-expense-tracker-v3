@@ -2,8 +2,9 @@
 
 This is an opt-in, fresh-data backend. Django remains the default. The existing
 Django/Railway service, accounts, data and deployment are not migrated or deleted
-by these changes. Configuration/deployment steps below are operator instructions;
-they have not been applied to a remote project.
+by these changes. The remote project is configured for the deployed Vercel
+production and preview origins. SMTP delivery and a real mailbox round-trip still
+need live acceptance.
 
 ## Frontend configuration
 
