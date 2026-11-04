@@ -128,7 +128,7 @@ select test.reject($q$update storage.objects set name='22222222-2222-2222-2222-2
 select test.assert((select count(*)=1 from storage.objects),'owner sees only own receipt');
 
 do $$ declare t record; cols text; vals text; begin
-  for t in select tablename from pg_tables where schemaname='public' and tablename like 'tracker\_%' escape '\' and tablename not in ('tracker_profiles','tracker_assistant_commands') loop
+  for t in select tablename from pg_tables where schemaname='public' and tablename like 'tracker\_%' escape '\' and tablename not in ('tracker_profiles','tracker_assistant_commands','tracker_bank_imports') loop
     select string_agg(quote_ident(column_name),',' order by column_name),
       string_agg(case when column_name='user_id' then '''22222222-2222-2222-2222-222222222222''::uuid' else quote_ident(column_name) end,',' order by column_name)
       into cols,vals from information_schema.column_privileges
@@ -143,7 +143,14 @@ reset role;
 do $$ declare t record; n int; begin
   for t in select tablename from pg_tables where schemaname='public' and tablename like 'tracker\_%' escape '\' loop
     select count(*) into n from pg_policies where schemaname='public' and tablename=t.tablename and cmd<>'ALL';
-    perform test.assert(n=4,t.tablename || ': four explicit policies');
+    if t.tablename='tracker_bank_imports' then
+      perform test.assert(n=1,t.tablename || ': one owner-select policy');
+      perform test.assert(not has_table_privilege('authenticated','public.tracker_bank_imports','INSERT'),t.tablename || ': direct insert denied');
+      perform test.assert(not has_table_privilege('authenticated','public.tracker_bank_imports','UPDATE'),t.tablename || ': direct update denied');
+      perform test.assert(not has_table_privilege('authenticated','public.tracker_bank_imports','DELETE'),t.tablename || ': direct delete denied');
+    else
+      perform test.assert(n=4,t.tablename || ': four explicit policies');
+    end if;
     perform test.assert(exists(select 1 from pg_policies where schemaname='public' and tablename=t.tablename and policyname='session_assurance' and permissive='RESTRICTIVE' and cmd='ALL'),t.tablename || ': restrictive MFA policy covers every operation');
     perform test.assert(not has_table_privilege('anon','public.'||t.tablename,'SELECT,INSERT,UPDATE,DELETE'),t.tablename || ': no anon privilege');
     if t.tablename <> 'tracker_profiles' then
@@ -155,7 +162,7 @@ set role authenticated;
 set request.jwt.claim.sub='22222222-2222-2222-2222-222222222222';
 do $$ declare t record; n int; col text; begin
   -- RPC-only command write denial is tested separately in assistant.sql.
-  for t in select tablename from pg_tables where schemaname='public' and tablename like 'tracker\_%' escape '\' and tablename<>'tracker_assistant_commands' loop
+  for t in select tablename from pg_tables where schemaname='public' and tablename like 'tracker\_%' escape '\' and tablename not in ('tracker_assistant_commands','tracker_bank_imports') loop
     col := case when t.tablename='tracker_profiles' then 'id' else 'user_id' end;
     execute format('select count(*) from public.%I where %I=''11111111-1111-1111-1111-111111111111''',t.tablename,col) into n;
     perform test.assert(n=0,t.tablename || ': cross-owner read hidden');
