@@ -1,4 +1,5 @@
 from django.urls import path
+from .bank_statement_views import BankStatementPreviewView, BankStatementCommitView
 
 from .analytics_views import AnalyticsSummaryView, TransactionCsvExportView
 from .assistant_views import (
@@ -36,6 +37,8 @@ from .v3_views import (
 )
 
 urlpatterns = [
+    path("v3/bank-statements/preview/", BankStatementPreviewView.as_view(), name="v3-bank-statement-preview"),
+    path("v3/bank-statements/import/", BankStatementCommitView.as_view(), name="v3-bank-statement-import"),
     path("health/", HealthView.as_view(), name="health"),
     path("ready/", ReadinessView.as_view(), name="ready"),
     path("register/", RegisterView.as_view(), name="register"),
