@@ -1,9 +1,9 @@
 // Read-only bank statement preview plus explicitly approved Supabase import.
-// Phase 1 supports bank-exported UTF-8 CSV. Raw statements never leave this browser.
+// Supports bank-exported UTF-8 CSV and text-based PDF. Raw statements never leave this browser.
 import { parseCsv } from './trackerCsv.js';
 import { checked, financeError, readAll } from './supabaseFinance.js';
 
-const MAX_SIZE = 2 * 1024 * 1024;
+const MAX_SIZE = 5 * 1024 * 1024;
 const MAX_ROWS = 1000;
 const aliases = {
   date: ['date', 'transactiondate', 'valuedate', 'txndate', 'postingdate', 'trandate'],
@@ -155,10 +155,15 @@ export async function previewBankStatement(client, userId, body, accounts) {
   const file = body instanceof FormData ? body.get('file') : null;
   const accountId = body instanceof FormData ? body.get('account_id') : '';
   const account = accountAvailable(accounts, accountId);
-  if (!(file instanceof Blob) || !String(file.name || '').toLowerCase().endsWith('.csv') || file.size > MAX_SIZE) {
-    throw financeError('Choose a bank-exported CSV file up to 2 MB.');
+  const filename = String(file?.name || '').toLowerCase();
+  const isPdf = filename.endsWith('.pdf');
+  if (!(file instanceof Blob) || !file.size || file.size > MAX_SIZE ||
+      (!isPdf && !filename.endsWith('.csv'))) {
+    throw financeError('Choose a CSV or PDF bank statement up to 5 MB.');
   }
-  const records = parseBankCsv(await file.text());
+  const records = isPdf
+    ? await (await import('./supabaseBankPdf.js')).parseBankPdf(file, String(body.get('pdf_password') || ''))
+    : parseBankCsv(await file.text());
   const rows = await fingerprintRows(String(account.id), records);
   const found = new Set();
   const hashes = rows.map((row) => row.fingerprint);
@@ -176,7 +181,7 @@ export async function previewBankStatement(client, userId, body, accounts) {
   }
   return {account:{id:account.id,name:account.name},rows,
     counts:Object.fromEntries(['ready','duplicate','possible_match','review_transfer'].map((s)=>[s,rows.filter((r)=>r.status===s).length])),
-    warning:'Uploaded CSV is processed in your browser; this is not a live bank connection. Transfers and card bill payments require manual reconciliation.'};
+    warning:'Your statement is processed locally in your browser; this is not a live bank connection. Transfers and card bill payments require manual reconciliation.'};
 }
 
 export async function commitBankStatement(client,userId,body,accounts) {

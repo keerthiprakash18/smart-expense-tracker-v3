@@ -1,7 +1,7 @@
 name: Supabase Bank Statement Phase 1
 on:
   push:
-    branches: [feature/supabase-bank-statements-phase1]
+    branches: [feature/supabase-bank-statements-phase1, feature/bank-statement-pdf-5mb]
   pull_request:
     branches: [feat/supabase-vercel-cutover]
 permissions:
@@ -21,8 +21,16 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: node --test tests/bank-statement.test.js
+      - run: node --test tests/bank-statement.test.js tests/bank-pdf-layout.test.js
       - run: npm run build
+      - name: Generate synthetic password-protected PDF test fixtures
+        run: |
+          python3 -m pip install --break-system-packages pypdf==5.9.0
+          python3 tests/generate-bank-pdfs.py
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Test real PDF.js clear and encrypted bank statement imports
+        run: npx playwright test --config tests/bank-pdf.playwright.config.js
 
   database:
     runs-on: ubuntu-latest

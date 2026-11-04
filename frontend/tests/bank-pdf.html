@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Bank PDF parser test</title></head>
+<body><p>Bank PDF parsing tests with synthetic data only.</p>
+<script type="module">
+  import { parseBankPdf } from '../src/services/supabaseBankPdf.js';
+  window.parseBankPdf = parseBankPdf;
+  window.bankPdfReady = true;
+</script></body></html>
