@@ -7,6 +7,7 @@ import csv
 import hashlib
 import io
 import re
+import zipfile
 from collections import Counter
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -187,12 +188,17 @@ def parse_statement(upload, password=""):
         if not content.startswith(b"PK"):
             raise StatementError("Not a valid XLSX file.")
         try:
+            # Bound decompressed XLSX content; ZIP containers can be tiny but expand enormously.
+            with zipfile.ZipFile(io.BytesIO(content)) as archive:
+                members = archive.infolist()
+                if len(members) > 1000 or sum(part.file_size for part in members) > 30 * 1024 * 1024:
+                    raise StatementError("XLSX expanded content exceeds safety limits.")
             from openpyxl import load_workbook
-            book = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+            book = load_workbook(io.BytesIO(content), read_only=True, data_only=True, keep_links=False)
             try:
                 sheet = book.active
                 rows = []
-                for row in sheet.iter_rows(max_row=MAX_ROWS + 40, values_only=True):
+                for row in sheet.iter_rows(max_row=MAX_ROWS + 40, max_col=50, values_only=True):
                     values = [v.isoformat()[:10] if isinstance(v, datetime) else v for v in row]
                     rows.append(values)
                 return parse_tabular(rows)
