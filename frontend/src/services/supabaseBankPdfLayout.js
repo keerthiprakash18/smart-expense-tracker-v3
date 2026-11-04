@@ -127,7 +127,7 @@ function mapCells(items,header) {
     // Never silently treat a far-right running balance as an additional
     // deposit when a bank PDF truncates/omits the final column heading.
     if (['debit','credit','amount'].includes(last.field) &&
-        item.x > last.x + 40 && /\\d/.test(item.text))
+        item.x > last.x + 40 && /\d/.test(item.text))
       throw financeError('PDF has an unlabeled monetary column. Debit/credit direction cannot be determined safely.');
     const col = boundaries.findIndex(limit=>item.x < limit);
     const field = header[col < 0 ? header.length - 1 : col].field;
