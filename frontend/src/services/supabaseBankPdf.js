@@ -4,6 +4,7 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import workerAsset from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 import { financeError } from './supabaseFinance.js';
 import { parsePdfBankItems } from './supabaseBankPdfLayout.js';
+import { diagnoseBankPdfPages } from './bankPdfSafeDiagnostics.js';
 
 const MAX_PAGES = 25;
 const MAX_ITEMS = 25000;
@@ -74,7 +75,16 @@ export async function parseBankPdf(file, password = '') {
         pages.push(data.items);
         page.cleanup();
       }
-      return parsePdfBankItems(pages);
+      try {
+        return parsePdfBankItems(pages);
+      } catch (error) {
+        // Only safe aggregate geometry is exposed on failure. The uploaded
+        // document, PDF text, amounts and password remain in this browser.
+        if (error?.response?.data) {
+          error.response.data.safePdfDiagnostic = diagnoseBankPdfPages(pages);
+        }
+        throw error;
+      }
     };
     return await Promise.race([
       work(),
