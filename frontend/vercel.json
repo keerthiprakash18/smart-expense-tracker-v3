@@ -1,10 +1,5 @@
 {
-  "rewrites": [
-    {
-      "source": "/media/:path*",
-      "destination": "https://smart-expense-tracker-v3-production.up.railway.app/media/:path*"
-    }
-  ],
+  "rewrites": [],
   "headers": [
     {
       "source": "/(.*)",
