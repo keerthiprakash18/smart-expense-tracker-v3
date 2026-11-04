@@ -94,6 +94,16 @@ def main():
     screenshot_style = screenshot_geometry_pdf()
     (folder / "synthetic-hdfc-centered.pdf").write_bytes(screenshot_style)
     save_encrypted(screenshot_style,folder / "synthetic-hdfc-centered-encrypted.pdf")
+    # Valid text PDF without transaction headers: should expose safe layout
+    # diagnostics after preview failure (never raw account text).
+    unsupported = render_pdf([
+        (40,740,"Bank Statement"),
+        (40,717,"Private Fake Customer"),
+        (40,695,"Account Number 999999999999"),
+        (40,670,"Opening Balance"),
+        (40,650,"100.00"),
+    ])
+    (folder / "synthetic-unsupported-layout.pdf").write_bytes(unsupported)
 
 
 if __name__ == "__main__":
