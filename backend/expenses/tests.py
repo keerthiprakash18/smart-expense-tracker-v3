@@ -241,7 +241,7 @@ class SmartExpenseApiTests(APITestCase):
                 "category": "Salary",
                 "account": account.id,
                 "frequency": "MONTHLY",
-                "next_run": "2026-09-21",
+                "next_run": timezone.localdate().isoformat(),
             },
             format="json",
         )
