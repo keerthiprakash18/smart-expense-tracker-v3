@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, Bell, Bot, CircleDollarSign, LayoutDashboard, LogOut, MoreHorizontal, Moon, Plus, ReceiptText, RefreshCw, Settings, Sun, WalletCards, WandSparkles } from 'lucide-react';
+import { BarChart3, Bell, Bot, CircleDollarSign, LayoutDashboard, Landmark, LogOut, MoreHorizontal, Moon, Plus, ReceiptText, RefreshCw, Settings, Sun, WalletCards, WandSparkles } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useFinance } from '../context/FinanceContext';
 import { useTheme } from '../context/ThemeContext';
@@ -16,6 +16,7 @@ const nav = [
   { to: '/money', label: 'Money Hub', icon: CircleDollarSign },
   { to: '/planner', label: 'Planner', icon: WandSparkles },
   { to: '/receipts', label: 'Receipt Vault', icon: ReceiptText },
+  { to: '/bank-statements', label: 'Bank Statements', icon: Landmark },
   { to: '/notifications', label: 'Notifications', icon: Bell },
   { to: '/profile', label: 'Profile & Settings', icon: Settings },
 ];
