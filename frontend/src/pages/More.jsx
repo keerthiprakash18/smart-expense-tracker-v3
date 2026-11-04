@@ -11,7 +11,7 @@ const items = [
   { to:'/planner', title:'Planner', text:'Budgets, recurring plans and future money actions', icon:WandSparkles },
   { to:'/analytics', title:'Analytics', text:'Full-ledger trends and category insights', icon:BarChart3 },
   { to:'/money', title:'Money Hub', text:'Borrowing, lending, bills and savings', icon:CircleDollarSign },
-  { to:'/bank-statements', title:'Bank Statement Import', text:'Review and import bank-exported CSV transactions', icon:Landmark },
+  { to:'/bank-statements', title:'Bank Statement Import', text:'Import CSV or password-protected PDF statements (up to 5 MB)', icon:Landmark },
   { to:'/receipts', title:'Receipt Vault', text:'Review securely stored receipt records', icon:ReceiptText },
   { to:'/notifications', title:'Notifications', text:'Due dates, recurring activity and alerts', icon:Bell },
   { to:'/profile', title:'Profile & Settings', text:'Security, theme, backup and account controls', icon:Settings },
