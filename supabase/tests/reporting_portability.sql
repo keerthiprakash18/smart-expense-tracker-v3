@@ -121,7 +121,7 @@ update auth.mfa_factors set status='verified' where user_id='44444444-4444-4444-
 set role authenticated;
 select test.assert(not tracker_private.session_allowed(),'verified factor blocks stale AAL1 token');
 do $$ declare t record; n int; col text; begin
-  for t in select tablename from pg_tables where schemaname='public' and tablename like 'tracker\_%' escape '\' and tablename<>'tracker_assistant_commands' loop
+  for t in select tablename from pg_tables where schemaname='public' and tablename like 'tracker\_%' escape '\' and tablename not in ('tracker_assistant_commands','tracker_bank_imports') loop
     execute format('select count(*) from public.%I',t.tablename) into n;
     perform test.assert(n=0,t.tablename || ': AAL1 cannot read own rows after MFA enrollment');
     execute format('delete from public.%I',t.tablename); get diagnostics n=row_count;
@@ -137,6 +137,8 @@ select test.reject('select public.tracker_process_recurring()','42501','MFA gate
 select test.reject('select public.tracker_sync_notifications()','42501','MFA gates definer notification RPC');
 select test.reject('select public.tracker_pay_card(1,1,1,current_date,'''')','42501','MFA gates card RPC');
 select test.reject('select public.tracker_import_expenses(''[{"amount":1}]'')','42501','MFA gates atomic CSV RPC');
+select test.assert((select count(*)=0 from public.tracker_bank_imports),'MFA gates bank fingerprint read');
+select test.reject('select public.tracker_import_bank_statement(1,''[]''::jsonb)','42501','MFA gates bank import RPC');
 select test.reject('select public.tracker_export_backup()','42501','MFA gates export RPC');
 select test.reject($q$select public.tracker_restore_backup((select data from test.saved where label='backup'),true)$q$,'42501','MFA gates definer restore RPC');
 select test.reject('select tracker_private.tracker_process_recurring()','42501','private original recurring implementation cannot bypass MFA');
