@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://smart-expense-tracker-v3-production.up.railway.app/api/:path*"
+    },
+    {
       "source": "/media/:path*",
       "destination": "https://smart-expense-tracker-v3-production.up.railway.app/media/:path*"
     }
