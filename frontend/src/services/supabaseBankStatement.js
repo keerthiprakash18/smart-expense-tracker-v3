@@ -156,9 +156,11 @@ export async function previewBankStatement(client, userId, body, accounts) {
   const accountId = body instanceof FormData ? body.get('account_id') : '';
   const account = accountAvailable(accounts, accountId);
   const filename = String(file?.name || '').toLowerCase();
-  const isPdf = filename.endsWith('.pdf');
+  const mime = String(file?.type || '').toLowerCase();
+  const isPdf = filename.endsWith('.pdf') || mime === 'application/pdf';
+  const isCsv = filename.endsWith('.csv') || mime === 'text/csv';
   if (!(file instanceof Blob) || !file.size || file.size > MAX_SIZE ||
-      (!isPdf && !filename.endsWith('.csv'))) {
+      (!isPdf && !isCsv)) {
     throw financeError('Choose a CSV or PDF bank statement up to 5 MB.');
   }
   const records = isPdf
