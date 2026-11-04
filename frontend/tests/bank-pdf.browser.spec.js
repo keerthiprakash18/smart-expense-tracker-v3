@@ -68,6 +68,7 @@ test('5 MB PDF limit rejects oversized files before parsing', async ({page,conte
 test('real PDF.js reads short-year recent-seven-days banking PDF with wrapped narration',async ({page,context})=>{
   const external = await load(page,context);
   const result = await read(page,recent,'');
+  if (result.error) console.log('SYNTHETIC_PDF_ITEMS: '+JSON.stringify(await page.evaluate(x=>window.inspectSyntheticPdf(x),recent)));
   expect(result.error).toBeUndefined();
   expect(result.rows).toHaveLength(2);
   expect(result.rows.map(r=>[r.date,r.amount,r.transaction_type])).toEqual([
