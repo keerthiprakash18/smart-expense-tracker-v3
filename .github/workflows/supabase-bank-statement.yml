@@ -1,0 +1,36 @@
+name: Supabase Bank Statement Phase 1
+on:
+  push:
+    branches: [feature/supabase-bank-statements-phase1]
+  pull_request:
+    branches: [feat/supabase-vercel-cutover]
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: node --test tests/bank-statement.test.js
+      - run: npm run build
+
+  database:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install local PostgreSQL (test cluster only)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql
+      - name: Migrations and PostgreSQL regression suite
+        run: python -u supabase/tests/run_local.py --pg-bin "$(pg_config --bindir)"
