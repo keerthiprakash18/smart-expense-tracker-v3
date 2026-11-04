@@ -15,7 +15,7 @@ const aliases = {
     'withdrawal','withdrawalamt','withdrawalamount','withdrawals','paidout'],
   credit: ['credit','creditamt','creditamount','cr','cramt','cramount',
     'deposit','depositamt','depositamount','deposits','paidin'],
-  balance: ['balance','closingbalance','runningbalance','availablebalance','balanceamount'],
+  balance: ['balance','closingbalance','closingbalan','closingbal','runningbalance','runningbal','availablebalance','availablebal','balanceamount'],
   amount: ['amount','transactionamount','transactionamt','txnamount','txnvalue'],
   direction: ['drcr','crdr','transactiontype','txntype','debitcredit','type'],
 };
@@ -122,7 +122,13 @@ function identifyHeader(items) {
 function mapCells(items,header) {
   const values = Object.fromEntries(header.map(h=>[h.field,'']));
   const boundaries = header.slice(1).map((h,i)=>(h.x + header[i].x)/2);
+  const last = header[header.length-1];
   for (const item of items) {
+    // Never silently treat a far-right running balance as an additional
+    // deposit when a bank PDF truncates/omits the final column heading.
+    if (['debit','credit','amount'].includes(last.field) &&
+        item.x > last.x + 40 && /\\d/.test(item.text))
+      throw financeError('PDF has an unlabeled monetary column. Debit/credit direction cannot be determined safely.');
     const col = boundaries.findIndex(limit=>item.x < limit);
     const field = header[col < 0 ? header.length - 1 : col].field;
     values[field] = (values[field] ? values[field] + ' ' : '') + item.text;
