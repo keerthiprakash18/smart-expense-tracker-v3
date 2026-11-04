@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 const clear = readFileSync(fileURLToPath(new URL('./fixtures/synthetic-bank.pdf', import.meta.url))).toString('base64');
 const encrypted = readFileSync(fileURLToPath(new URL('./fixtures/synthetic-bank-encrypted.pdf', import.meta.url))).toString('base64');
+const recent = readFileSync(fileURLToPath(new URL('./fixtures/synthetic-recent-seven-days.pdf', import.meta.url))).toString('base64');
+const recentEncrypted = readFileSync(fileURLToPath(new URL('./fixtures/synthetic-recent-seven-days-encrypted.pdf', import.meta.url))).toString('base64');
 
 async function load(page, context) {
   const external = [];
@@ -61,4 +63,28 @@ test('5 MB PDF limit rejects oversized files before parsing', async ({page,conte
     catch (error) { return error?.response?.data?.error || String(error); }
   });
   expect(result).toMatch(/5 MB/i);
+});
+
+test('real PDF.js reads short-year recent-seven-days banking PDF with wrapped narration',async ({page,context})=>{
+  const external = await load(page,context);
+  const result = await read(page,recent,'');
+  expect(result.error).toBeUndefined();
+  expect(result.rows).toHaveLength(2);
+  expect(result.rows.map(r=>[r.date,r.amount,r.transaction_type])).toEqual([
+    ['2026-06-29','350.00','EXPENSE'],
+    ['2026-06-30','25000.00','INCOME'],
+  ]);
+  expect(result.rows[0].description).toContain('TRANSACTION FROM PHONE');
+  expect(external).toEqual([]);
+});
+
+test('password-protected recent-seven-days PDF parses with correct password only',async ({page,context})=>{
+  const external=await load(page,context);
+  const bad=await read(page,recentEncrypted,'WrongTestPassword');
+  expect(bad.error).toMatch(/password/i);
+  const good=await read(page,recentEncrypted,'OnlyForTests123');
+  expect(good.error).toBeUndefined();
+  expect(good.rows).toHaveLength(2);
+  expect(good.rows[0].transaction_type).toBe('EXPENSE');
+  expect(external).toEqual([]);
 });
