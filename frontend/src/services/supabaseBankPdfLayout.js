@@ -80,6 +80,16 @@ function headingTokens(items) {
 }
 
 function identifyHeader(items) {
+  // When a PDF generator emits the entire row of headers as one wide text
+  // object, PDF.js exposes only one total width, not true glyph positions.
+  // Guessing the positions can swap money OUT and money IN; refuse instead.
+  if (items.some(item => {
+    const text = norm(item.text);
+    return text.includes('date') &&
+      (text.includes('narration') || text.includes('description') || text.includes('particulars')) &&
+      (text.includes('withdrawal') || text.includes('debit')) &&
+      (text.includes('deposit') || text.includes('credit'));
+  })) throw financeError('PDF Debit/Credit headings are merged and cannot be positioned safely. Use a bank CSV or a redacted layout sample.');
   const tokens = headingTokens(items), fields = [];
   for (let i = 0; i < tokens.length; i++) {
     let candidate = null;
