@@ -555,3 +555,21 @@ class AssistantWakeToken(models.Model):
 
     def __str__(self):
         return f"{self.user.username} wake token"
+
+
+class BankStatementEntry(models.Model):
+    """Idempotency record for approved statement transactions, not raw bank files."""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="bank_statement_entries")
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name="bank_statement_entries")
+    expense = models.ForeignKey(Expense, on_delete=models.SET_NULL, null=True, blank=True, related_name="bank_import_entries")
+    fingerprint = models.CharField(max_length=64)
+    imported_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "account", "fingerprint"],
+                name="uniq_bank_statement_entry_user_account_fingerprint",
+            )
+        ]
+        ordering = ["-imported_at"]
