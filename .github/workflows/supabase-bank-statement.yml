@@ -1,7 +1,7 @@
 name: Supabase Bank Statement Phase 1
 on:
   push:
-    branches: [feature/supabase-bank-statements-phase1, feature/bank-statement-pdf-5mb, fix/bank-file-picker-mobile, fix/bank-pdf-hdfc-layouts]
+    branches: [feature/supabase-bank-statements-phase1, feature/bank-statement-pdf-5mb, fix/bank-file-picker-mobile, fix/bank-pdf-hdfc-layouts, fix/hdfc-bank-pdf-actual-columns]
   pull_request:
     branches: [feat/supabase-vercel-cutover]
 permissions:
@@ -21,7 +21,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: node --test tests/bank-statement.test.js tests/bank-pdf-layout.test.js tests/bank-pdf-hdfc-layout.test.js tests/bank-file.test.js
+      - run: node --test tests/bank-statement.test.js tests/bank-pdf-layout.test.js tests/bank-pdf-hdfc-layout.test.js tests/bank-pdf-hdfc-centered.test.js tests/bank-file.test.js
       - run: npm run build
       - name: Generate synthetic password-protected PDF test fixtures
         run: |

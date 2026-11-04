@@ -13,7 +13,7 @@ def render_pdf(cells):
         "<< /Type /Catalog /Pages 2 0 R >>",
         "<< /Type /Pages /Kids [4 0 R] /Count 1 >>",
         "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 900 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>",
         f"<< /Length {len(stream)} >>\nstream\n" + stream.decode("ascii") + "\nendstream",
     ]
     output = "%PDF-1.4\n"
@@ -56,6 +56,24 @@ def recent_seven_days_pdf():
     ])
 
 
+
+def screenshot_geometry_pdf():
+    # Synthetic geometry patterned after a bank statement with centered
+    # heading labels and left-aligned rows. No customer data is used.
+    return render_pdf([
+        (20,755,"Statement of account"),
+        (55,740,"Date"),(179,740,"Narration"),(321,740,"Chq./Ref.No."),
+        (430,740,"Value Dt"),(495,740,"Withdrawal Amt."),(572,740,"Deposit Amt."),
+        (651,740,"Closing Balance"),
+        (23,714,"04/09/26"),(80,714,"UPI-TEST COFFEE SHOP"),(321,714,"111122223333"),
+        (421,714,"05/09/26"),(505,714,"200.00"),(654,714,"3540.00"),
+        (80,703,"TEST PURCHASE"),
+        (23,682,"04/09/26"),(80,682,"UPI-TEST MARKET"),(321,682,"111122223334"),
+        (421,682,"05/09/26"),(505,682,"300.00"),(654,682,"3240.00"),
+        (23,664,"04/09/26"),(80,664,"NEFT TEST REFUND"),(321,664,"111122223335"),
+        (421,664,"05/09/26"),(575,664,"60.00"),(654,664,"3300.00"),
+    ])
+
 def save_encrypted(raw, path):
     writer = PdfWriter()
     writer.append(PdfReader(io.BytesIO(raw)))
@@ -73,6 +91,9 @@ def main():
     recent = recent_seven_days_pdf()
     (folder / "synthetic-recent-seven-days.pdf").write_bytes(recent)
     save_encrypted(recent, folder / "synthetic-recent-seven-days-encrypted.pdf")
+    screenshot_style = screenshot_geometry_pdf()
+    (folder / "synthetic-hdfc-centered.pdf").write_bytes(screenshot_style)
+    save_encrypted(screenshot_style,folder / "synthetic-hdfc-centered-encrypted.pdf")
 
 
 if __name__ == "__main__":

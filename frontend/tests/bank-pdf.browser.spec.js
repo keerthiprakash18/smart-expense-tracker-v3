@@ -6,6 +6,8 @@ const clear = readFileSync(fileURLToPath(new URL('./fixtures/synthetic-bank.pdf'
 const encrypted = readFileSync(fileURLToPath(new URL('./fixtures/synthetic-bank-encrypted.pdf', import.meta.url))).toString('base64');
 const recent = readFileSync(fileURLToPath(new URL('./fixtures/synthetic-recent-seven-days.pdf', import.meta.url))).toString('base64');
 const recentEncrypted = readFileSync(fileURLToPath(new URL('./fixtures/synthetic-recent-seven-days-encrypted.pdf', import.meta.url))).toString('base64');
+const centered = readFileSync(fileURLToPath(new URL('./fixtures/synthetic-hdfc-centered.pdf', import.meta.url))).toString('base64');
+const centeredEncrypted = readFileSync(fileURLToPath(new URL('./fixtures/synthetic-hdfc-centered-encrypted.pdf', import.meta.url))).toString('base64');
 
 async function load(page, context) {
   const external = [];
@@ -86,5 +88,31 @@ test('password-protected recent-seven-days PDF parses with correct password only
   expect(good.error).toBeUndefined();
   expect(good.rows).toHaveLength(2);
   expect(good.rows[0].transaction_type).toBe('EXPENSE');
+  expect(external).toEqual([]);
+});
+
+
+test('screenshot-style HDFC centered headings: real PDF.js extracts debit, credit and wrapped narration', async ({page,context})=>{
+  const external = await load(page,context);
+  const result=await read(page,centered,'');
+  expect(result.error).toBeUndefined();
+  expect(result.rows).toHaveLength(3);
+  expect(result.rows.map(r=>[r.date,r.amount,r.transaction_type])).toEqual([
+    ['2026-09-04','200.00','EXPENSE'],
+    ['2026-09-04','300.00','EXPENSE'],
+    ['2026-09-04','60.00','INCOME'],
+  ]);
+  expect(result.rows[0].description).toContain('TEST PURCHASE');
+  expect(external).toEqual([]);
+});
+
+test('AES-protected HDFC centered-heading PDF opens locally and keeps correct debit/credit', async ({page,context})=>{
+  const external=await load(page,context);
+  const rejected=await read(page,centeredEncrypted,'IncorrectTestPassword');
+  expect(rejected.error).toMatch(/password/i);
+  const accepted=await read(page,centeredEncrypted,'OnlyForTests123');
+  expect(accepted.error).toBeUndefined();
+  expect(accepted.rows).toHaveLength(3);
+  expect(accepted.rows[2].transaction_type).toBe('INCOME');
   expect(external).toEqual([]);
 });

@@ -61,7 +61,7 @@ function rowsByBaseline(items) {
       if (!buckets.has(bucket)) buckets.set(bucket, []);
       buckets.get(bucket).push(line);
     }
-    line.items.push({x, text:item.str.trim(), width:Number(item.width) || 0});
+    line.items.push({x, y, text:item.str.trim(), width:Number(item.width) || 0});
   }
   return lines.sort((a,b)=>b.y-a.y).map(line=>line.items.sort((a,b)=>a.x-b.x));
 }
@@ -76,7 +76,9 @@ function headingTokens(items) {
         width: width * match[0].length / Math.max(1,text.length)});
     }
   }
-  return tokens;
+  // Merge text fragments even when a PDF places "Amt." or "Balance"
+  // on the next baseline under its corresponding heading.
+  return tokens.sort((a,b)=>a.x-b.x);
 }
 
 function identifyHeader(items) {
@@ -119,7 +121,54 @@ function identifyHeader(items) {
   return fields;
 }
 
+function isHdfcColumnTable(header) {
+  // These HDFC-style exports center their headings, but left-align the
+  // transaction date and narration. Midpoints of heading positions therefore
+  // mistakenly put the entire narration into the Date cell.
+  const fields = header.map(h=>h.field);
+  return ['date','description','reference','valueDate','debit','credit','balance']
+    .every(field=>fields.includes(field)) &&
+    fields.indexOf('date') < fields.indexOf('description') &&
+    fields.indexOf('description') < fields.indexOf('reference') &&
+    fields.indexOf('reference') < fields.indexOf('valueDate') &&
+    fields.indexOf('valueDate') < fields.indexOf('debit') &&
+    fields.indexOf('debit') < fields.indexOf('credit') &&
+    fields.indexOf('credit') < fields.indexOf('balance');
+}
+
+function mapHdfcCells(items,header) {
+  const values = Object.fromEntries(header.map(h=>[h.field,'']));
+  const at = field => header.find(h=>h.field===field).x;
+  // Column cuts: narration spans the space from immediately after Date
+  // to just before Chq./Ref.No. The other fields are right-hand columns.
+  const cuts = [
+    (at('description')+at('reference'))/2,
+    (at('reference')+at('valueDate'))/2,
+    (at('valueDate')+at('debit'))/2,
+    (at('debit')+at('credit'))/2,
+    (at('credit')+at('balance'))/2,
+  ];
+  const dateLimit = at('date')+Math.min(25,(at('description')-at('date'))/3);
+  for (const item of items) {
+    let field;
+    if (item.x < cuts[0]) {
+      // The date must be a standalone left-column value. A HDFC narration
+      // can be printed closer to the centered "Date" heading than to the
+      // centered "Narration" heading: preserve it as description.
+      const looksDate = fullDate.test(item.text);
+      field = looksDate && item.x <= dateLimit && !values.date ? 'date' : 'description';
+    } else if (item.x < cuts[1]) field='reference';
+    else if (item.x < cuts[2]) field='valueDate';
+    else if (item.x < cuts[3]) field='debit';
+    else if (item.x < cuts[4]) field='credit';
+    else field='balance';
+    values[field] = (values[field] ? values[field]+' ' : '') + item.text;
+  }
+  return values;
+}
+
 function mapCells(items,header) {
+  if (isHdfcColumnTable(header)) return mapHdfcCells(items,header);
   const values = Object.fromEntries(header.map(h=>[h.field,'']));
   const boundaries = header.slice(1).map((h,i)=>(h.x + header[i].x)/2);
   const last = header[header.length-1];
@@ -232,11 +281,30 @@ export function parsePdfBankItems(pages) {
     pending = null;
   };
   for (const lines of linesByPage) {
-    for (const line of lines) {
-      const foundHeader = identifyHeader(line);
+    for (let lineIndex=0;lineIndex<lines.length;lineIndex++) {
+      const line=lines[lineIndex];
+      let foundHeader=identifyHeader(line);
+      // On many real bank PDFs, "Value Dt", "Withdrawal Amt." and
+      // "Closing Balance" are split across adjacent printed baselines.
+      // Combine heading fragments, but never include a dated transaction row.
+      const following=lines[lineIndex+1];
+      if (following && line[0] && following[0]) {
+        const distance=Math.abs(line[0].y-following[0].y);
+        const nextWords=following.map(i=>norm(i.text));
+        const isHeadingContinuation=nextWords.some(word =>
+          ['amt','amount','balance','bal','dt','date','cr','dr'].includes(word));
+        const hasDateValue=following.some(i=>fullDate.test(i.text));
+        if (distance<=22 && isHeadingContinuation && !hasDateValue) {
+          const combined=identifyHeader([...line,...following]);
+          if (combined && (!foundHeader || combined.length>foundHeader.length)) {
+            foundHeader=combined;
+            lineIndex++;
+          }
+        }
+      }
       if (foundHeader) {
         flush();
-        header = foundHeader;
+        header=foundHeader;
         continue;
       }
       if (!header) continue;
