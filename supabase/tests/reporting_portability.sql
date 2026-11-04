@@ -4,7 +4,7 @@ create table test.saved(label text primary key,data jsonb not null);
 grant select,insert,update on test.saved to authenticated;
 insert into auth.users(id,raw_user_meta_data) values('44444444-4444-4444-4444-444444444444','{"name":"Reports","accepted_terms":true,"accepted_privacy":true}');
 select test.assert((select terms_accepted_at is not null and privacy_accepted_at is not null and abs(extract(epoch from terms_accepted_at-now()))<10 from public.tracker_profiles where id='44444444-4444-4444-4444-444444444444'),'signup boolean legal declarations become server timestamps');
-select test.assert((select count(*)=17 from pg_tables where schemaname='public' and tablename like 'tracker\_%' escape '\'),'16 portable app tables plus RPC-only assistant commands');
+select test.assert((select count(*)=18 from pg_tables where schemaname='public' and tablename like 'tracker\_%' escape '\'),'16 portable app tables plus RPC-only assistant commands and bank import ledger');
 set role authenticated;
 set request.jwt.claim.sub='44444444-4444-4444-4444-444444444444';
 set request.jwt.claim.aal='aal1';
