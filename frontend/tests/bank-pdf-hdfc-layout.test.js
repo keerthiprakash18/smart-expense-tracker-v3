@@ -88,3 +88,11 @@ test('impossible DD/MM/YY calendar dates fail',()=>{
   ];
   assert.throws(()=>parsePdfBankItems([page]),/invalid transaction date/i);
 });
+
+test('unlabeled far-right money must not become a fake deposit',()=>{
+  const page=[
+    ...parts(740,[['Date',35],['Narration',120],['Debit',340],['Credit',430]]),
+    ...parts(719,[['04/11/26',35],['TEST',120],['100.00',340],['900.00',550]]),
+  ];
+  assert.throws(()=>parsePdfBankItems([page]),/unlabeled monetary column/i);
+});
