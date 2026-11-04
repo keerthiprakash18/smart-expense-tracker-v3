@@ -34,14 +34,10 @@ test('PDF column header may arrive as combined item with measured width',()=>{
   assert.equal(rows[0].date,'2026-11-04');
 });
 
-test('PDF full heading in one PDF text object can still be split using its width',()=>{
+test('PDF full heading in one text object is rejected before debit/credit can be reversed',()=>{
   const headings=parts(740,[['Date        Narration                 Withdrawal Amt.     Deposit Amt.     Closing Balance',32,600]]);
   const row=parts(719,[['04/11/26',32],['RESTAURANT',120],['100.00',360],['900.00',550]]);
-  const rows = parsePdfBankItems([[...headings,...row]]);
-  assert.equal(rows.length,1);
-  assert.equal(rows[0].date,'2026-11-04');
-  assert.equal(rows[0].amount,'100.00');
-  assert.equal(rows[0].transaction_type,'EXPENSE');
+  assert.throws(()=>parsePdfBankItems([[...headings,...row]]),/headings are merged/i);
 });
 
 test('narration wraps to the next line without duplicating the amount',()=>{
