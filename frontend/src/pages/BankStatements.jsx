@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { FileUp, Landmark, ShieldCheck, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import api from '../services/api';
 import { useFinance } from '../context/FinanceContext';
 import { PageHeader, Surface, money } from '../components/Ui';
+import { selectBankStatementFile } from '../services/bankStatementFile';
 
 const STATUSES = {
   ready: 'Ready for review',
@@ -17,6 +18,8 @@ export default function BankStatements() {
   const [format, setFormat] = useState('pdf');
   const [pdfPassword, setPdfPassword] = useState('');
   const [accountId, setAccountId] = useState('');
+  const fileInputRef = useRef(null);
+  const [fileInfo, setFileInfo] = useState(null);
   
   const [rows, setRows] = useState([]);
   const [selected, setSelected] = useState([]);
@@ -27,9 +30,43 @@ export default function BankStatements() {
   const [summary, setSummary] = useState(null);
   const currency = profile?.currency || '₹';
 
+  // Pick the existing bank account after asynchronous finance data loads.
+  // A missing account used to leave Preview disabled even after selecting a file.
+  useEffect(() => {
+    setAccountId(current => {
+      if (current && accounts.some(a => String(a.id) === String(current))) return current;
+      const bank = accounts.find(a => String(a.account_type || '').toUpperCase() === 'BANK') || accounts[0];
+      return bank ? String(bank.id) : '';
+    });
+  }, [accounts]);
+
   const clearPreview = () => {
     setRows([]); setSelected([]); setCategories({}); setAllowMatches(false);
     setSummary(null); setError('');
+  };
+
+  const clearFile = () => {
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setFile(null);
+    setFileInfo(null);
+    clearPreview();
+  };
+
+  const chooseFile = (candidate) => {
+    clearPreview();
+    try {
+      const next = selectBankStatementFile(candidate);
+      setFile(next.file);
+      setFileInfo(next);
+      setFormat(next.format);
+      // Switching to CSV must remove a previously typed PDF-only password.
+      if (next.format !== 'pdf') setPdfPassword('');
+    } catch (err) {
+      setFile(null);
+      setFileInfo(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setError(err?.message || 'Unable to select this file.');
+    }
   };
 
   const payload = () => {
@@ -44,7 +81,7 @@ export default function BankStatements() {
     event.preventDefault();
     setError(''); setSummary(null);
     if (!file || !accountId) { setError('Choose an account and statement file.'); return; }
-    if (file.size > 5 * 1024 * 1024) { setError('Maximum file size is 5 MB.'); return; }
+    if (!fileInfo) { setError('The statement file was not selected. Please choose a PDF or CSV.'); return; }
     setBusy(true);
     try {
       const res = await api.post('/api/v3/bank-statements/preview/', payload());
@@ -74,8 +111,9 @@ export default function BankStatements() {
       form.append('allow_possible_matches', String(allowMatches));
       const res = await api.post('/api/v3/bank-statements/import/', form);
       setSummary(res.data);
-      setRows([]); setSelected([]); setFile(null); setCategories({});
+      setRows([]); setSelected([]); setFile(null); setFileInfo(null); setCategories({});
       setPdfPassword('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
 
       await refresh();
       notify('Bank statement transactions imported');
@@ -108,23 +146,37 @@ export default function BankStatements() {
             </select>
           </label>
           <label><span>Statement format</span>
-            <select value={format} onChange={e=>{setFormat(e.target.value);setFile(null);setPdfPassword('');clearPreview();}}>
+            <select value={format} onChange={e=>{setFormat(e.target.value);setPdfPassword('');clearFile();}}>
               <option value="pdf">PDF bank statement</option>
               <option value="csv">CSV bank statement</option>
             </select>
           </label>
-          <label><span>{format === 'pdf' ? 'PDF statement' : 'CSV statement'} (maximum 5 MB)</span>
-            <input key={format} type="file" accept={format === 'pdf' ? '.pdf,application/pdf' : '.csv,text/csv'}
-              onChange={e=>{setFile(e.target.files?.[0]||null);clearPreview();}} required />
-          </label>
+          <div className="bank-file-field">
+            <label htmlFor="bank-statement-file"><span>Choose PDF or CSV (maximum 5 MB)</span></label>
+            <input id="bank-statement-file" ref={fileInputRef} className="bank-file-input"
+              type="file" aria-describedby="bank-file-help bank-file-status"
+              onChange={e=>chooseFile(e.currentTarget.files?.[0])} />
+            <span id="bank-file-help" className="bank-file-help">
+              Tap Choose File, then select your statement from Downloads, Files or Documents.
+              PDF and CSV are both allowed; the app checks the format after selection.
+            </span>
+            <div id="bank-file-status" className={fileInfo ? 'bank-file-status selected' : 'bank-file-status'} role="status" aria-live="polite">
+              {fileInfo ? <><CheckCircle2 size={18} /><span>
+                <strong>File selected: {fileInfo.name}</strong>
+                <small>{fileInfo.format.toUpperCase()} · {fileInfo.sizeLabel} · ready for preview</small>
+              </span><button className="bank-file-remove" type="button" onClick={clearFile}>Remove</button></> :
+                <span>No file selected yet</span>}
+            </div>
+          </div>
           {format === 'pdf' && <label><span>PDF password (only if protected)</span>
             <input type="password" autoComplete="off" maxLength={200} value={pdfPassword}
               onChange={e=>{setPdfPassword(e.target.value);clearPreview();}}
               placeholder="Enter your statement password privately" />
           </label>}
         </div>
-        <p style={{opacity:.78,fontSize:13}}>CSV and text-based PDF bank statements are supported up to 5 MB. Password-protected PDFs can be opened with your statement password, only in this browser. PDF tables must have identifiable Date, Narration, Debit and Credit columns; scanned/image-only PDFs or unrecognized layouts are rejected rather than guessing financial transactions. PDFs are limited to 25 pages.</p>
-        <button className="button primary" type="submit" disabled={busy||!file||!accountId}>
+        <p style={{opacity:.78,fontSize:13}}>CSV and text-based PDF bank statements are supported up to 5 MB. A selected file is confirmed above before Preview is enabled. Password-protected PDFs can be opened with your statement password, only in this browser. PDF tables must have identifiable Date, Narration, Debit and Credit columns; scanned/image-only PDFs or unrecognized layouts are rejected rather than guessing financial transactions. PDFs are limited to 25 pages.</p>
+        {fileInfo && !accountId && <p className="bank-file-hint" role="status">File selected. Choose the bank account above to enable Preview.</p>}
+        <button className="button primary" type="submit" disabled={busy||!fileInfo||!accountId}>
           <FileUp size={17}/>{busy?'Processing…':'Preview transactions'}
         </button>
       </form>

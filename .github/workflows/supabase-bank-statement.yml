@@ -1,7 +1,7 @@
 name: Supabase Bank Statement Phase 1
 on:
   push:
-    branches: [feature/supabase-bank-statements-phase1, feature/bank-statement-pdf-5mb]
+    branches: [feature/supabase-bank-statements-phase1, feature/bank-statement-pdf-5mb, fix/bank-file-picker-mobile]
   pull_request:
     branches: [feat/supabase-vercel-cutover]
 permissions:
@@ -21,7 +21,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
-      - run: node --test tests/bank-statement.test.js tests/bank-pdf-layout.test.js
+      - run: node --test tests/bank-statement.test.js tests/bank-pdf-layout.test.js tests/bank-file.test.js
       - run: npm run build
       - name: Generate synthetic password-protected PDF test fixtures
         run: |
@@ -31,6 +31,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Test real PDF.js clear and encrypted bank statement imports
         run: npx playwright test --config tests/bank-pdf.playwright.config.js
+      - name: Test actual mobile and desktop file picker in React screen
+        run: npx playwright test --config tests/bank-picker.playwright.config.js
 
   database:
     runs-on: ubuntu-latest

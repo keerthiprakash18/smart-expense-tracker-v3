@@ -895,3 +895,21 @@ body::before{
   .assistant-composer{position:sticky;bottom:calc(72px + env(safe-area-inset-bottom));z-index:8}.assistant-privacy-note{padding-bottom:2px}
   .assistant-fab-shell{width:46px;height:46px;border-radius:15px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom))}
 }
+
+/* Bank statement picker: keep the native document control visible on mobile.
+   A restrictive accept filter hid some downloaded PDFs in Android file providers. */
+.bank-file-field{grid-column:1/-1;display:flex;flex-direction:column;min-width:0;gap:9px}
+.bank-file-field>label{font-size:11px;font-weight:800;color:var(--text)}
+.bank-file-input{box-sizing:border-box;display:block;width:100%;max-width:100%;min-width:0;min-height:56px;padding:10px;border:1px solid var(--border-strong);border-radius:13px;background:var(--panel-soft);color:var(--text);font-size:13px;line-height:1.5;cursor:pointer;touch-action:manipulation;opacity:1}
+.bank-file-input::file-selector-button{background:rgba(var(--accent-rgb),.18);color:var(--text);border:1px solid rgba(var(--accent-rgb),.32);border-radius:10px;padding:10px 14px;margin-right:12px;min-height:38px;cursor:pointer;font-size:12px;font-weight:800}
+.bank-file-input:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.bank-file-help{font-size:11px;line-height:1.55;color:var(--muted)}
+.bank-file-status{display:flex;align-items:center;gap:10px;min-width:0;min-height:43px;padding:11px;border:1px solid var(--border);border-radius:12px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.bank-file-status.selected{border-color:rgba(70,215,166,.4);background:rgba(70,215,166,.06);color:var(--text)}
+.bank-file-status.selected>svg{flex-shrink:0;color:var(--success)}
+.bank-file-status>span{min-width:0;flex:1;overflow-wrap:anywhere}
+.bank-file-status strong,.bank-file-status small{display:block;overflow-wrap:anywhere}
+.bank-file-status small{margin-top:4px;color:var(--muted);font-size:11px}
+.bank-file-remove{flex-shrink:0;min-height:36px;border:1px solid var(--border);border-radius:9px;background:var(--panel-soft);color:var(--text);padding:5px 9px;font-size:12px;cursor:pointer}
+.bank-file-hint{font-size:12px;color:var(--warning);margin:0}
+@media(max-width:650px){.bank-file-input::file-selector-button{margin-right:7px;padding:10px}.bank-file-status{align-items:flex-start}.bank-file-remove{align-self:flex-start}}
