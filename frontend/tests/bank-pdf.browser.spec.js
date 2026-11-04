@@ -8,6 +8,7 @@ const recent = readFileSync(fileURLToPath(new URL('./fixtures/synthetic-recent-s
 const recentEncrypted = readFileSync(fileURLToPath(new URL('./fixtures/synthetic-recent-seven-days-encrypted.pdf', import.meta.url))).toString('base64');
 const centered = readFileSync(fileURLToPath(new URL('./fixtures/synthetic-hdfc-centered.pdf', import.meta.url))).toString('base64');
 const centeredEncrypted = readFileSync(fileURLToPath(new URL('./fixtures/synthetic-hdfc-centered-encrypted.pdf', import.meta.url))).toString('base64');
+const unsupported = readFileSync(fileURLToPath(new URL('./fixtures/synthetic-unsupported-layout.pdf', import.meta.url))).toString('base64');
 
 async function load(page, context) {
   const external = [];
@@ -28,7 +29,10 @@ async function read(page, source, password) {
     const bytes = Uint8Array.from(atob(source), (character) => character.charCodeAt(0));
     const file = new File([bytes], 'synthetic-bank.pdf', {type:'application/pdf'});
     try { return { rows: await window.parseBankPdf(file, password) }; }
-    catch (error) { return { error: error?.response?.data?.error || error?.message || String(error) }; }
+    catch (error) { return {
+      error: error?.response?.data?.error || error?.message || String(error),
+      safePdfDiagnostic: error?.response?.data?.safePdfDiagnostic || null,
+    }; }
   }, {source,password});
 }
 
@@ -114,5 +118,20 @@ test('AES-protected HDFC centered-heading PDF opens locally and keeps correct de
   expect(accepted.error).toBeUndefined();
   expect(accepted.rows).toHaveLength(3);
   expect(accepted.rows[2].transaction_type).toBe('INCOME');
+  expect(external).toEqual([]);
+});
+
+
+test('unsupported real PDF yields only private geometric diagnostics and no document content',async ({page,context})=>{
+  const external=await load(page,context);
+  const failed=await read(page,unsupported,'');
+  expect(failed.error).toMatch(/No structured/);
+  expect(failed.safePdfDiagnostic).toBeTruthy();
+  expect(failed.safePdfDiagnostic.pages).toBe(1);
+  expect(failed.safePdfDiagnostic.pagesInspected[0].textItems).toBeGreaterThan(0);
+  const json=JSON.stringify(failed.safePdfDiagnostic);
+  for(const secret of ['Private Fake Customer','999999999999','100.00','Account Number','Bank Statement']){
+    expect(json).not.toContain(secret);
+  }
   expect(external).toEqual([]);
 });

@@ -79,3 +79,22 @@ test('changing PDF/CSV selection resets the previous file and allows reselecting
   await expect(page.getByLabel('Statement format')).toHaveValue('pdf');
   await expect(page.getByRole('button',{name:/Preview transactions/i})).toBeEnabled();
 });
+
+
+test('unsupported PDF displays a voluntary layout-only diagnostic for support',async ({page})=>{
+  await page.goto('/tests/bank-picker.html');
+  await page.locator('#bank-statement-file').setInputFiles({
+    name:'unsupported-statement.pdf',mimeType:'application/pdf',
+    buffer:Buffer.from('%PDF-1.4\nSynthetic metadata-only PDF\n%%EOF')
+  });
+  await page.getByRole('button',{name:/Preview transactions/i}).click();
+  await expect(page.getByRole('alert')).toContainText('No structured bank transactions');
+  await expect(page.getByText('PDF layout diagnostic')).toBeVisible();
+  await expect(page.getByRole('button',{name:'Copy safe diagnostic report'})).toBeVisible();
+  await page.getByText('View the safe diagnostic report').click();
+  await expect(page.locator('pre')).toContainText('"dateTokens": 0');
+  await expect(page.locator('pre')).toContainText('"reportVersion": 1');
+  const printed=await page.locator('pre').innerText();
+  expect(printed).not.toContain('Synthetic metadata-only PDF');
+  expect(printed).not.toContain('password');
+});
