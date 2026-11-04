@@ -31,14 +31,27 @@ function identifyHeader(items) {
 }
 
 function rowsByBaseline(items) {
+  // Bucket by PDF y-coordinate instead of an O(n^2) scan over all text lines.
+  const buckets = new Map();
   const lines = [];
   for (const item of items) {
     if (!item || typeof item.str !== 'string' || !item.str.trim() ||
         !Number.isFinite(item.transform?.[4]) || !Number.isFinite(item.transform?.[5])) continue;
     const x = item.transform[4], y = item.transform[5];
-    const row = lines.find((line) => Math.abs(line.y - y) <= 2);
-    if (row) row.items.push({ x, text: item.str.trim() });
-    else lines.push({ y, items: [{ x, text: item.str.trim() }] });
+    const bucket = Math.round(y / 2);
+    let row;
+    for (let offset = -1; offset <= 1; offset++) {
+      const matches = buckets.get(bucket + offset) || [];
+      row = matches.find((entry) => Math.abs(entry.y - y) <= 2);
+      if (row) break;
+    }
+    if (!row) {
+      row = {y, items:[]};
+      lines.push(row);
+      if (!buckets.has(bucket)) buckets.set(bucket,[]);
+      buckets.get(bucket).push(row);
+    }
+    row.items.push({x,text:item.str.trim()});
   }
   return lines.sort((a,b) => b.y - a.y).map((line) =>
     line.items.sort((a,b) => a.x - b.x)
