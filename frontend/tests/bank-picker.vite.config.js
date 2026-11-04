@@ -1,11 +1,13 @@
-import { defineConfig, mergeConfig } from 'vite';
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
-import appConfig from '../vite.config.js';
 
 const target = (file) => fileURLToPath(new URL(file, import.meta.url));
-// Alias exactly the three dependencies imported by the *actual* bank statements page.
-// No live Supabase connection or real user data is used in these browser tests.
-export default mergeConfig(appConfig, defineConfig({
+// Only build the real BankStatements screen under synthetic finance/API mocks.
+// Building the entire app here would accidentally apply mocks to unrelated pages.
+export default defineConfig({
+  plugins: [react()],
+  root:target('../'),
   resolve: {
     alias: [
       { find: /^\.\.\/context\/FinanceContext$/, replacement: target('./bank-picker.mockFinance.jsx') },
@@ -16,9 +18,6 @@ export default mergeConfig(appConfig, defineConfig({
   build: {
     outDir:'node_modules/.cache/bank-picker-build',
     emptyOutDir:true,
-    rollupOptions:{input:{
-      app:target('../index.html'),
-      picker:target('./bank-picker.html'),
-    }},
+    rollupOptions:{input:{picker:target('./bank-picker.html')}},
   },
-}));
+});
