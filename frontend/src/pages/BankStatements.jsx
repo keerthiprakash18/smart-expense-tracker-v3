@@ -54,7 +54,6 @@ export default function BankStatements() {
       setError(err.response?.data?.error || 'Could not safely read this statement. Try an exported CSV or XLSX.');
     } finally {
       setBusy(false);
-      setPdfPassword('');
     }
   };
 
