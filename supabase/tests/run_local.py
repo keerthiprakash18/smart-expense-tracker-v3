@@ -92,6 +92,29 @@ def main() -> None:
             sql(f"insert into auth.users(id) values('{USER}')")
             ids = json.loads(sql(f"select json_object_agg(account_type,id) from public.tracker_accounts where user_id='{USER}'").stdout)
             bank, cash = ids["BANK"], ids["CASH"]
+            # Bank import: atomic account debits, duplicate-replay prevention,
+            # unauthorized transfer exclusion, and deletion restoring balance.
+            bank_row = json.dumps([{
+                "fingerprint": "a" * 64,
+                "title": "Synthetic bank purchase",
+                "amount": "12.50",
+                "transaction_type": "EXPENSE",
+                "category": "Food & Dining",
+                "date": "2026-11-04",
+                "payment_method": "UPI",
+            }])
+            statement_sql = f"select public.tracker_import_bank_statement({bank},'{bank_row}'::jsonb)"
+            first = as_user(statement_sql)
+            assert '"created": 1' in first.stdout or '"created":1' in first.stdout, first.stdout
+            again = as_user(statement_sql)
+            assert '"already_imported": 1' in again.stdout or '"already_imported":1' in again.stdout, again.stdout
+            assert_sql(f"select count(*)=1 from public.tracker_bank_imports where user_id='{USER}'", "bank fingerprint stored once")
+            assert_sql(f"select balance=-12.50 from public.tracker_accounts where id={bank}", "bank import changed balance exactly once")
+            blocked = as_user(f"select public.tracker_import_bank_statement({bank},'[{{\"fingerprint\":\"{'b'*64}\",\"title\":\"SELF TRANSFER\",\"amount\":\"1.00\",\"transaction_type\":\"EXPENSE\",\"date\":\"2026-11-04\"}}]'::jsonb)", check=False)
+            assert blocked.returncode != 0 and "manual reconciliation" in blocked.stderr.lower(), "Self transfer must be blocked"
+            as_user("delete from public.tracker_expenses where title='Synthetic bank purchase'")
+            assert_sql(f"select count(*)=0 from public.tracker_bank_imports where user_id='{USER}'", "deleting imported expense removes stale fingerprint")
+            assert_sql(f"select balance=0 from public.tracker_accounts where id={bank}", "deleting imported expense reverses bank debit")
             results = concurrent(f"insert into public.tracker_expenses(account,amount) values({bank},1)", 24)
             assert all(result.returncode == 0 for result in results), "Concurrent expense insert failed: " + "\n".join(result.stderr for result in results if result.returncode)
             assert_sql(f"select balance=-24 from public.tracker_accounts where id={bank}", "24 concurrent expenses have no lost updates")
