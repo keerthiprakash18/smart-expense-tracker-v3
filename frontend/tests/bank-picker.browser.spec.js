@@ -18,7 +18,7 @@ test('mobile: native file chooser persists a downloaded PDF and unlocks Preview'
     input.click(),
   ]);
   await chooser.setFiles(pdf);
-  await expect(input).toHaveJSProperty('files',await input.evaluate(el=>el.files)); // asserts browser keeps file list
+  expect(await input.evaluate(el=>el.files?.[0]?.name)).toBe('Bank Statement NOV 2026.PDF');
   await expect(page.locator('#bank-file-status')).toContainText('File selected: Bank Statement NOV 2026.PDF');
   await expect(page.locator('#bank-file-status')).toContainText('ready for preview');
   await expect(page.getByRole('button',{name:/Preview transactions/i})).toBeEnabled();
