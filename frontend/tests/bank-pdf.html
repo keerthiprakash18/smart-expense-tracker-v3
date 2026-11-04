@@ -3,18 +3,6 @@
 <body><p>Bank PDF parsing tests with synthetic data only.</p>
 <script type="module">
   import { parseBankPdf } from '../src/services/supabaseBankPdf.js';
-  import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
-  import workerAsset from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
-  window.inspectSyntheticPdf = async (base64) => {
-    const bytes = Uint8Array.from(atob(base64), ch=>ch.charCodeAt(0));
-    const native = new Worker(new URL(workerAsset,location.href),{type:'module'});
-    const worker = new pdfjs.PDFWorker({port:native});
-    const task = pdfjs.getDocument({data:bytes,worker});
-    try {
-      const doc=await task.promise, page=await doc.getPage(1), items=(await page.getTextContent()).items;
-      return items.map(i=>({str:i.str,x:i.transform?.[4],y:i.transform?.[5],width:i.width}));
-    } finally {await task.destroy(); native.terminate();worker.destroy();}
-  };
   window.parseBankPdf = parseBankPdf;
   window.bankPdfReady = true;
 </script></body></html>
