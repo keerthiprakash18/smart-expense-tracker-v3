@@ -37,9 +37,11 @@ test('PDF column header may arrive as combined item with measured width',()=>{
 test('PDF full heading in one PDF text object can still be split using its width',()=>{
   const headings=parts(740,[['Date        Narration                 Withdrawal Amt.     Deposit Amt.     Closing Balance',32,600]]);
   const row=parts(719,[['04/11/26',32],['RESTAURANT',120],['100.00',360],['900.00',550]]);
-  // The all-in-one PDF text heading may have approximate character widths;
-  // this test detects whether enough positional detail was retained.
-  assert.throws(()=>parsePdfBankItems([[...headings,...row]]),/No structured|dated row|Invalid/);
+  const rows = parsePdfBankItems([[...headings,...row]]);
+  assert.equal(rows.length,1);
+  assert.equal(rows[0].date,'2026-11-04');
+  assert.equal(rows[0].amount,'100.00');
+  assert.equal(rows[0].transaction_type,'EXPENSE');
 });
 
 test('narration wraps to the next line without duplicating the amount',()=>{
