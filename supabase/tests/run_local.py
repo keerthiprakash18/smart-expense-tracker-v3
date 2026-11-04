@@ -78,7 +78,7 @@ def main() -> None:
 
         try:
             try:
-                command([pg_ctl, "-D", str(data), "-l", str(log), "-o", f"-h 127.0.0.1 -p {port} -F", "-w", "start"])
+                command([pg_ctl, "-D", str(data), "-l", str(log), "-o", f"-h 127.0.0.1 -p {port} -k {temp} -F", "-w", "start"])
             except RuntimeError as exc:
                 detail = log.read_text(errors="replace") if log.exists() else "No postgres log was written"
                 raise RuntimeError(f"{exc}\nPostgres server log:\n{detail}") from exc
