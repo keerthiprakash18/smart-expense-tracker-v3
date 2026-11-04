@@ -13,7 +13,7 @@ def render_pdf(cells):
         "<< /Type /Catalog /Pages 2 0 R >>",
         "<< /Type /Pages /Kids [4 0 R] /Count 1 >>",
         "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 900 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>",
         f"<< /Length {len(stream)} >>\nstream\n" + stream.decode("ascii") + "\nendstream",
     ]
     output = "%PDF-1.4\n"
