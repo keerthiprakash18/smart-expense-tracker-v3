@@ -77,7 +77,11 @@ def main() -> None:
             print(result.stderr.strip())
 
         try:
-            command([pg_ctl, "-D", str(data), "-l", str(log), "-o", f"-h 127.0.0.1 -p {port} -F", "-w", "start"])
+            try:
+                command([pg_ctl, "-D", str(data), "-l", str(log), "-o", f"-h 127.0.0.1 -p {port} -F", "-w", "start"])
+            except RuntimeError as exc:
+                detail = log.read_text(errors="replace") if log.exists() else "No postgres log was written"
+                raise RuntimeError(f"{exc}\nPostgres server log:\n{detail}") from exc
             started = True
             print(sql("select version()").stdout.strip())
             files = [ROOT / "tests" / "bootstrap.sql", *sorted((ROOT / "migrations").glob("*.sql")), ROOT / "tests" / "security_finance.sql", ROOT / "tests" / "reporting_portability.sql", ROOT / "tests" / "assistant.sql"]
