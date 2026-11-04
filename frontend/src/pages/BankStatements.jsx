@@ -27,6 +27,8 @@ export default function BankStatements() {
   const [allowMatches, setAllowMatches] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [safePdfDiagnostic, setSafePdfDiagnostic] = useState(null);
+  const [diagnosticCopied, setDiagnosticCopied] = useState(false);
   const [summary, setSummary] = useState(null);
   const currency = profile?.currency || '₹';
 
@@ -42,7 +44,7 @@ export default function BankStatements() {
 
   const clearPreview = () => {
     setRows([]); setSelected([]); setCategories({}); setAllowMatches(false);
-    setSummary(null); setError('');
+    setSummary(null); setError(''); setSafePdfDiagnostic(null); setDiagnosticCopied(false);
   };
 
   const clearFile = () => {
@@ -79,7 +81,7 @@ export default function BankStatements() {
 
   const preview = async (event) => {
     event.preventDefault();
-    setError(''); setSummary(null);
+    setError(''); setSummary(null); setSafePdfDiagnostic(null); setDiagnosticCopied(false);
     if (!file || !accountId) { setError('Choose an account and statement file.'); return; }
     if (!fileInfo) { setError('The statement file was not selected. Please choose a PDF or CSV.'); return; }
     setBusy(true);
@@ -91,6 +93,8 @@ export default function BankStatements() {
       setCategories({});
     } catch (err) {
       setRows([]);
+      setSafePdfDiagnostic(err.response?.data?.safePdfDiagnostic || null);
+      setDiagnosticCopied(false);
       setError(err.response?.data?.error || 'Could not read this bank statement safely. Check the PDF password, or export a CSV.');
     } finally {
       setBusy(false);
@@ -183,6 +187,37 @@ export default function BankStatements() {
     </Surface>
 
     {error && <Surface><div className="settings-note" role="alert"><AlertTriangle size={20}/><div><strong>Import needs attention</strong><span>{error}</span></div></div></Surface>}
+
+    {safePdfDiagnostic && <Surface>
+      <div className="section-heading"><div>
+        <span>PRIVATE TROUBLESHOOTING</span>
+        <h2>PDF layout diagnostic</h2>
+        <p>The parser could not identify this statement's columns. This report contains only
+          page counts, detected heading names, and rounded text positions. It does not
+          include transaction text, amounts, dates, account details, or your PDF password.
+          Nothing is sent automatically.</p>
+      </div></div>
+      <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
+        <button className="button" type="button" onClick={async()=>{
+          const report=JSON.stringify(safePdfDiagnostic,null,2);
+          try {
+            await navigator.clipboard.writeText(report);
+            setDiagnosticCopied(true);
+          } catch {
+            setDiagnosticCopied(false);
+            setError('Clipboard permission was blocked. Copy the private diagnostic text shown below instead.');
+          }
+        }}>{diagnosticCopied?'Copied — paste it into ChatGPT':'Copy safe diagnostic report'}</button>
+        <span style={{fontSize:12,opacity:.8}}>Only report text is copied — not your bank statement.</span>
+      </div>
+      <details style={{marginTop:12}}>
+        <summary>View the safe diagnostic report</summary>
+        <pre style={{whiteSpace:'pre-wrap',wordBreak:'break-word',fontSize:11,maxHeight:260,overflowY:'auto'}}>
+          {JSON.stringify(safePdfDiagnostic,null,2)}
+        </pre>
+      </details>
+    </Surface>}
+
     {summary && <Surface><div className="settings-note"><CheckCircle2 size={20}/><div><strong>{summary.created} transaction(s) imported</strong><span>{summary.already_imported} already imported. {summary.message}</span></div></div></Surface>}
 
     {rows.length>0 && <Surface>
