@@ -72,7 +72,8 @@ function headingTokens(items) {
     const text = item.text;
     const width = item.width > 0 ? item.width : text.length * 5;
     for (const match of text.matchAll(/\S+/g)) {
-      tokens.push({text:match[0], x:item.x + width * match.index / Math.max(1,text.length)});
+      tokens.push({text:match[0], x:item.x + width * match.index / Math.max(1,text.length),
+        width: width * match[0].length / Math.max(1,text.length)});
     }
   }
   return tokens;
@@ -84,7 +85,13 @@ function identifyHeader(items) {
     let candidate = null;
     // Match a full field label before its parts: "Withdrawal Amt.", "Chq./Ref.No."
     for (let size = Math.min(4, tokens.length - i); size >= 1; size--) {
-      const joined = norm(tokens.slice(i,i+size).map(x=>x.text).join(''));
+      const group = tokens.slice(i,i+size);
+      // Separate "Debit" and "Credit" columns must not be mistaken
+      // for one "Debit/Credit" direction header merely because they
+      // occur next to each other in a wide transaction table.
+      if (group.some((token,index)=>index > 0 &&
+          token.x - (group[index-1].x + group[index-1].width) > 18)) continue;
+      const joined = norm(group.map(x=>x.text).join(''));
       const field = Object.keys(aliases).find(key=>aliases[key].includes(joined));
       if (field) { candidate = { field, size, x:tokens[i].x }; break; }
     }
