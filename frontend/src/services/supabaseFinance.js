@@ -192,6 +192,14 @@ export function createFinanceHandler(client, { scanReceipt, predict, now = () =>
       const { exportCsv } = await import('./trackerCsv.js');
       return answer(new Blob([exportCsv(filterLedger(rows, url.searchParams, accounts), accounts)], { type: 'text/csv;charset=utf-8' }));
     }
+    if (route === 'v3/bank-statements/preview' && method === 'POST') {
+      const { previewBankStatement } = await import('./supabaseBankStatement.js');
+      return answer(await previewBankStatement(client,uid,body,await all('accounts')));
+    }
+    if (route === 'v3/bank-statements/import' && method === 'POST') {
+      const { commitBankStatement } = await import('./supabaseBankStatement.js');
+      return answer(await commitBankStatement(client,uid,body,await all('accounts')));
+    }
     if (route === 'v3/import/csv' && method === 'POST') {
       const file = body instanceof FormData && body.get('file');
       if (!(file instanceof Blob) || file.size > 2 * 1024 * 1024) throw financeError('Choose a CSV file smaller than 2 MiB.');
