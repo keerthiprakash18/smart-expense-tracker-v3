@@ -14,6 +14,8 @@ const STATUSES = {
 export default function BankStatements() {
   const { accounts, profile, refresh, notify } = useFinance();
   const [file, setFile] = useState(null);
+  const [format, setFormat] = useState('pdf');
+  const [pdfPassword, setPdfPassword] = useState('');
   const [accountId, setAccountId] = useState('');
   
   const [rows, setRows] = useState([]);
@@ -34,7 +36,7 @@ export default function BankStatements() {
     const form = new FormData();
     form.append('file', file);
     form.append('account_id', accountId);
-
+    if (format === 'pdf' && pdfPassword) form.append('pdf_password', pdfPassword);
     return form;
   };
 
@@ -42,6 +44,7 @@ export default function BankStatements() {
     event.preventDefault();
     setError(''); setSummary(null);
     if (!file || !accountId) { setError('Choose an account and statement file.'); return; }
+    if (file.size > 5 * 1024 * 1024) { setError('Maximum file size is 5 MB.'); return; }
     setBusy(true);
     try {
       const res = await api.post('/api/v3/bank-statements/preview/', payload());
@@ -51,7 +54,7 @@ export default function BankStatements() {
       setCategories({});
     } catch (err) {
       setRows([]);
-      setError(err.response?.data?.error || 'Could not safely read this statement. Try an exported CSV or XLSX.');
+      setError(err.response?.data?.error || 'Could not read this bank statement safely. Check the PDF password, or export a CSV.');
     } finally {
       setBusy(false);
     }
@@ -72,6 +75,7 @@ export default function BankStatements() {
       const res = await api.post('/api/v3/bank-statements/import/', form);
       setSummary(res.data);
       setRows([]); setSelected([]); setFile(null); setCategories({});
+      setPdfPassword('');
 
       await refresh();
       notify('Bank statement transactions imported');
@@ -93,7 +97,7 @@ export default function BankStatements() {
       </div>
       <div className="settings-note"><ShieldCheck size={20}/><div>
         <strong>Not a live bank connection</strong>
-        <span>This feature reads a file you choose. It never asks for banking credentials, PINs or OTPs, and does not store the uploaded statement itself.</span>
+        <span>CSV/PDF statements and PDF passwords are processed locally in your browser. Neither the raw document nor its password is uploaded or stored. Never enter your banking login password, ATM PIN or OTP here.</span>
       </div></div>
       <form onSubmit={preview} className="page-stack" style={{ marginTop: 18 }}>
         <div className="form-grid two">
@@ -103,11 +107,23 @@ export default function BankStatements() {
               {accounts.map(a=><option key={a.id} value={a.id}>{a.name} ({a.account_type})</option>)}
             </select>
           </label>
-          <label><span>Bank-exported CSV (up to 2 MB)</span>
-            <input type="file" accept=".csv,text/csv" onChange={e=>{setFile(e.target.files?.[0]||null);clearPreview();}} required />
+          <label><span>Statement format</span>
+            <select value={format} onChange={e=>{setFormat(e.target.value);setFile(null);setPdfPassword('');clearPreview();}}>
+              <option value="pdf">PDF bank statement</option>
+              <option value="csv">CSV bank statement</option>
+            </select>
           </label>
+          <label><span>{format === 'pdf' ? 'PDF statement' : 'CSV statement'} (maximum 5 MB)</span>
+            <input key={format} type="file" accept={format === 'pdf' ? '.pdf,application/pdf' : '.csv,text/csv'}
+              onChange={e=>{setFile(e.target.files?.[0]||null);clearPreview();}} required />
+          </label>
+          {format === 'pdf' && <label><span>PDF password (only if protected)</span>
+            <input type="password" autoComplete="off" maxLength={200} value={pdfPassword}
+              onChange={e=>{setPdfPassword(e.target.value);clearPreview();}}
+              placeholder="Enter your statement password privately" />
+          </label>}
         </div>
-        <p style={{opacity:.78,fontSize:13}}>Phase 1 supports UTF-8 CSV statements with Date, Description/Narration, Debit/Credit columns. Bank PDF and Excel support is not enabled yet; export CSV instead. Unsupported formats are rejected rather than guessing.</p>
+        <p style={{opacity:.78,fontSize:13}}>CSV and text-based PDF bank statements are supported up to 5 MB. Password-protected PDFs can be opened with your statement password, only in this browser. PDF tables must have identifiable Date, Narration, Debit and Credit columns; scanned/image-only PDFs or unrecognized layouts are rejected rather than guessing financial transactions. PDFs are limited to 25 pages.</p>
         <button className="button primary" type="submit" disabled={busy||!file||!accountId}>
           <FileUp size={17}/>{busy?'Processing…':'Preview transactions'}
         </button>
@@ -151,7 +167,7 @@ export default function BankStatements() {
       </button>
     </Surface>}
     <Surface><div className="section-heading"><div><span>FUTURE FEATURE</span><h2><Landmark size={18} style={{verticalAlign:'middle'}}/> Automatic bank sync</h2></div></div>
-      <p>Live bank connections are not available yet. They require a verified, authorized consent-based banking partner. No banking login details are needed for CSV statement imports.</p>
+      <p>Live bank connections are not available yet. They require a verified, authorized consent-based banking partner. No banking login details are needed for CSV or PDF statement imports.</p>
     </Surface>
   </div>;
 }
