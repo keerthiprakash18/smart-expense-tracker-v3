@@ -61,7 +61,7 @@ function rowsByBaseline(items) {
       if (!buckets.has(bucket)) buckets.set(bucket, []);
       buckets.get(bucket).push(line);
     }
-    line.items.push({x, text:item.str.trim(), width:Number(item.width) || 0});
+    line.items.push({x, y, text:item.str.trim(), width:Number(item.width) || 0});
   }
   return lines.sort((a,b)=>b.y-a.y).map(line=>line.items.sort((a,b)=>a.x-b.x));
 }
